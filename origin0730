@@ -1,0 +1,2356 @@
+const helper = require('./component-helper');
+const apis =  require('./apis');
+const { DateTime } = require("luxon");
+
+const misc = helper.getMisc();
+const pData = helper.getData();
+var param;
+
+if (pData.body) {
+  param = pData.body;
+} else {
+  param = pData;
+}
+main()
+
+// メイン処理
+async function main () {
+    try {
+        let result={}
+        // 設備画面か
+        if(param.class == "equipment"){
+            // タイプで実行する処理を変える
+            switch(param.type){
+                case "master":
+                    result = await equipmentGetMaster()
+                    helper.setData({result:result});
+                    break;
+                case "search":
+                    result = await equipmentSearch()
+                    helper.setData({equipments:result});
+                    break;
+                case "create":
+                    result = await equipmentCreate()
+                    helper.setData({create:result});
+                    break;
+                case "delete":
+                    result = await equipmentDelete()
+                    helper.setData({delete:result});
+                    break;
+                case "upload":
+                    result = await equipmentUpload()
+                    helper.setData({upload:result});
+                    break;
+            }
+        }
+        // 備品画面か
+        else if(param.class == "spare"){
+            // タイプで実行する処理を変える
+            switch(param.type){
+                case "master":
+                    result = await spareGetMaster()
+                    helper.setData({result:result});
+                    break;
+                case "search":
+                    result = await spareSearch()
+                    helper.setData({spares:result});
+                    break;
+                case "create":
+                    result = await spareCreate()
+                    helper.setData({create:result});
+                    break;
+                case "delete":
+                    result = await spareDelete()
+                    helper.setData({delete:result});
+                    break;
+                case "upload":
+                    result = await equipmentUpload()
+                    helper.setData({upload:result});
+                    break;
+            }
+        }
+        // 作業画面か
+        else if(param.class == "work"){
+            // タイプで実行する処理を変える
+            switch(param.type){
+                case "master":
+                    result = await workGetMaster()
+                    helper.setData({master:result});
+                    break;
+                case "search":
+                    result = await workSearch()
+                    helper.setData({workList:result});
+                    break;
+                case "create":
+                    result = await workCreate()
+                    helper.setData({create:result});
+                    break;
+                case "delete":
+                    result = await workDelete()
+                    helper.setData({delete:result});
+                    break;
+                case "upload":
+                    result = await equipmentUpload()
+                    helper.setData({upload:result});
+                    break;
+                case "jobcategory":
+                    result = await workGetRegisteredJobCategories()
+                    helper.setData({jobCategories:result});
+                    break;
+                case "details":
+                    result = await workDetails()
+                    helper.setData({details:result});
+                    break;
+                case "workplans":
+                    result = await workPlans()
+                    helper.setData({workPlans:result});
+                    break;
+            }
+        }
+        helper.end();
+    }
+    catch(e){
+        helper.appendConsole(e.message);
+        const data = 'Err';
+        helper.setData(data);
+        helper.setStatus(405, e.message);
+        helper.end();
+    }
+}
+
+//// 設備管理画面
+// マスター取得処理
+async function equipmentGetMaster(){
+    try{
+        // ユーザートークンから組織を割り出す
+        let organizationId = await apis.getUser(misc)
+        let organizationName = await apis.getOrganizations(misc,organizationId)
+
+        // マスターデータの雛形
+        let masterData = {
+            organization:{
+                organizationName:organizationName,
+                sites:[],
+            },
+            cycleUnit:[
+                {
+                    key:"年",
+                    value:"年"
+                },
+                {
+                    key:"月",
+                    value:"月"
+                },
+                {
+                    key:"週",
+                    value:"週"
+                },
+                {
+                    key:"日",
+                    value:"日"
+                }
+            ],
+            equipmentType:[
+                {
+                    key:"器具",
+                    value:"器具"
+                },
+                {
+                    key:"盤",
+                    value:"盤"
+                },
+                {
+                    key:"装置",
+                    value:"装置"
+                },
+                {
+                    key:"設置場所",
+                    value:"設置場所"
+                },
+                {
+                    key:"その他",
+                    value:"その他"
+                }
+            ]
+        }
+
+        // 権限があるサイトを取得
+        let res = await apis.getAllSite(misc)
+        if(!("err" in res)){
+            let siteList = res.data
+            for (var item in siteList ) {
+                // サイトコードに紐づく場所を取得
+                siteList[item].locations=[]
+    
+                // サイトコードに紐づく装置IDを取得
+                siteList[item].equipments=[]
+                
+                // 親が01のRDSプロパティを取得
+                let filterParam={
+                    filter:'rdsParentReferenceDesignation=01'
+                }
+                let res = await apis.getRDS(misc,siteList[item].siteCode,filterParam)
+                if(!("err" in res)){
+                    let rdsList = res.data
+                    for (var rds in rdsList ) {
+    
+                        // 場所の名称を設定
+                        let oneLocat = {
+                            locationName:rdsList[rds].rdsName,
+                            locationId:rdsList[rds].rdsName
+                        }
+        
+                        // 場所の配下にある装置を取得
+                        let filterParam={
+                            filter:'rdsParentReferenceDesignation=' + rds
+                        }
+                        oneLocat.equipments=[]
+                        let res = await apis.getRDS(misc,siteList[item].siteCode,filterParam)
+                        if(!("err" in res)){
+                            let locationList = res.data
+                            for (var location in locationList ) {
+                                // 装置名称を設定
+                                let oneEquipment = {
+                                    equipmentName:locationList[location].rdsName,
+                                    equipmentId:locationList[location].rdsName,
+                                }
+                                oneLocat.equipments.push(oneEquipment)
+            
+                                // 名称を抜き出し
+                                let rdsName = locationList[location].rdsName
+            
+                                // 同じ名称があるか?
+                                if(siteList[item].equipments.length > 0){
+                                    let keys = siteList[item].equipments.find(item => item.equipmentName === rdsName)
+                                    if(keys == undefined){
+                                        siteList[item].equipments.push(oneEquipment)
+                                    }
+                                }
+                                else{
+                                    siteList[item].equipments.push(oneEquipment)
+                                }
+                            }
+                            siteList[item].locations.push(oneLocat)
+                        }
+                    }
+                    masterData.organization.sites.push(siteList[item])
+                }
+            }
+        }
+
+        return masterData
+    }
+    catch(e){
+        return {err:e.message}
+    }
+}
+// 検索
+async function equipmentSearch(){
+    try{
+        // 検索条件を取得
+        let conditions = param.params
+
+        // 返り値の雛形
+        let equipments={
+            rows:[],
+            count:0
+        }
+
+        // サイト名があるか?
+        if("siteCode" in conditions){
+            // サイトコードを取得
+            let siteCode = conditions.siteCode
+
+            // 検索条件の整理
+
+            // プロパティ情報
+            let filter = ""
+            let locationId = ("locationId" in conditions) ? conditions.locationId : ""
+            if(locationId != ""){
+                filter += `asEquipmentLocation=${locationId}`
+            }
+
+            // タグ情報
+            let filter_tag = ""
+            let parentEquipmentId = ("parentEquipmentId" in conditions) ? conditions.parentEquipmentId : ""
+            if(parentEquipmentId != ""){
+                filter_tag += `parentEquipmentId=${parentEquipmentId}`
+            }
+            
+            let equipmentType = ("equipmentType" in conditions) ? conditions.equipmentType : ""
+            if(equipmentType != ""){
+                if(filter_tag!=""){
+                    filter_tag +="&"
+                }
+                filter_tag += `equipmentType=${equipmentType}`
+            }
+
+            // パラメータまとめ
+            let filterParam = {}
+            if(filter!=""){
+                filterParam.filter=filter
+            }
+            if(filter_tag!=""){
+                filterParam.tags_filter=filter_tag
+            }
+
+            // 設備リストを取得
+            let res = await apis.getAssetList(misc,siteCode,filterParam)
+            if(!("err" in res)){
+                let assetList = res.data
+
+                // 全てのRDSプロパティを取得
+                let filterParam={}
+                let rdsRes = await apis.getRDS(misc,siteCode,filterParam)
+                if(!("err" in rdsRes)){
+                    let rds = rdsRes.data
+                    for (var item in assetList ) {
+                        let spareCount=0
+                        if("asEquipmentSpareParts" in assetList[item]){
+                            spareCount = assetList[item].asEquipmentSpareParts.length
+                        }
+    
+                        if(assetList[item].asEquipmentTags == null){
+                            assetList[item].asEquipmentTags={}
+                        }
+                        let ReferenceDesignation1 = ""
+                        let ReferenceDesignation2 = ""
+                        let ReferenceDesignation3 = ""
+
+                        // 自分のデータを確認
+                        if(assetList[item].asEquipmentReference != ""){
+                            let equipment = rds[assetList[item].asEquipmentReference]
+
+
+                            try{
+                                // 一つ上が存在するか?
+                                if( "rdsParentReferenceDesignation" in equipment && equipment.rdsParentReferenceDesignation != null){
+                                    ReferenceDesignation1 = rds[equipment.rdsParentReferenceDesignation]
+    
+                                    // さらに一つ上が存在するか
+                                    if("rdsParentReferenceDesignation" in ReferenceDesignation1 && ReferenceDesignation1.rdsParentReferenceDesignation != null){
+                                        ReferenceDesignation2 = rds[ReferenceDesignation1.rdsParentReferenceDesignation]
+                                        // さらに一つ上が存在するか
+                                        if("rdsParentReferenceDesignation" in ReferenceDesignation2 && ReferenceDesignation2.rdsParentReferenceDesignation != null){
+                                            ReferenceDesignation3 = rds[ReferenceDesignation2.rdsParentReferenceDesignation]
+                                        }
+                                    }
+                                }
+                            }
+                            catch(e){
+                                return {err:assetList[item]}
+                            }
+                        }
+                        
+
+                        
+
+                        let locationName = ""
+                        let equipmentName = ""
+                        // 二つ上までRDSが存在する
+                        if(ReferenceDesignation2 !="" && ReferenceDesignation3 !=""){
+                            // 設備なので装置と場所を設定
+                            locationName = ReferenceDesignation2.rdsName
+                            equipmentName = ReferenceDesignation1.rdsName
+                        }
+                        else if(ReferenceDesignation1 ==""){
+                            // RDS登録なし
+                            locationName = ""
+                            equipmentName = ""
+                        }
+                        else{
+                            // 装置なので場所のみ設定
+                            locationName = ReferenceDesignation1.rdsName
+                            equipmentName = ""
+                        }
+
+        
+                        // 検索
+                        let row = {
+                            equipmentId:item,
+                            siteCode:siteCode,
+                            equipmentModel:assetList[item].asEquipmentModelNumber,
+                            locationName:locationName,
+                            equipmentName:assetList[item].asEquipmentProductName,
+                            parentEquipmentName:equipmentName,
+                            equipmentNo:assetList[item].asEquipmentReference,
+                            equipmentType:("equipmentType" in assetList[item].asEquipmentTags) ? assetList[item].asEquipmentTags.equipmentType : "",
+                            assetNo:("assetNo" in assetList[item].asEquipmentTags) ? assetList[item].asEquipmentTags.assetNo : "",
+                            machineNo:assetList[item].asEquipmentSerialNumber,
+                            inspectionPlanCount:null,
+                            spareCount:spareCount,
+                            madeDate:("madeDate" in assetList[item].asEquipmentTags) ? assetList[item].asEquipmentTags.madeDate : "",
+                        }
+                        equipments.rows.push(row)
+                    }
+                }
+                
+
+                // 設備番号でフィルター
+                let equipmentNo = ("equipmentNo" in conditions) ? conditions.equipmentNo : ""
+                if(equipmentNo != ""){
+                    equipments.rows = equipments.rows.filter(item => item.equipmentNo.length > 0 && item.equipmentNo[0].indexOf(equipmentNo) >= 0)
+                }
+
+                // 名前でフィルター
+                let equipmentName = ("equipmentName" in conditions) ? conditions.equipmentName : ""
+                if(equipmentName != ""){
+                    equipments.rows = equipments.rows.filter(item => item.equipmentName.indexOf(equipmentName) >= 0)
+                }
+
+                equipments.count = equipments.rows.length
+            }
+        }
+
+        return equipments.rows
+    }
+    catch(e){
+        return {err:e.message}
+    }
+}
+
+// 設備追加
+async function equipmentCreate(){
+    try{
+        // 追加データを取得
+        let insertData = param.params
+
+        // サイト名があるか?
+        if("siteCode" in insertData){
+            // サイトコードを取得
+            let siteCode = insertData.siteCode
+            // 添付ファイルのID取得
+            let idList = param.idList
+
+            // 場所を抜き出し
+            let locationId=""
+            // 親が01のRDSプロパティを取得
+            let filterParam={
+                filter:'rdsParentReferenceDesignation=01'
+            }
+            let res = await apis.getRDS(misc,siteCode,filterParam)
+            if(!("err" in res)){
+                let rdsList = res.data
+                for (var rds in rdsList ) {
+                    if(insertData.locationId == rdsList[rds].rdsName){
+                        locationId = rds
+                    }
+                }
+    
+                // 場所があるか?
+                if(locationId != ""){
+                    let rdsNum = ""
+                    let rdsParent=""
+                    let num = 1
+    
+                    // 紐づいている設備を取得
+                    filterParam={
+                        filter:'rdsParentReferenceDesignation='+locationId
+                    }
+                    
+                    res = await apis.getRDS(misc,siteCode,filterParam)
+                    if(!("err" in res)){
+                        rdsList = res.data
+                        // 装置が指定されているか？
+                        if("parentEquipmentId" in insertData){
+                            let equipmentId=""
+                            // 装置のIDを取得
+                            for (var rds in rdsList ) {
+                                if(insertData.parentEquipmentId == rdsList[rds].rdsName){
+                                    equipmentId = rds
+                                }
+                            }
+        
+                            // 紐づいている設備を取得
+                            filterParam={
+                                filter:'rdsParentReferenceDesignation='+equipmentId
+                            }
+                            res = await apis.getRDS(misc,siteCode,filterParam)
+                            if(!("err" in res)){
+                                rdsList = res.data
+        
+                                // 検索する名称を抜き出し
+                                let rdsName = equipmentId + "-" +insertData.equipmentNo
+            
+                                // 同じ名称があるか?
+                                let indexList = Object.keys(rdsList).filter(item => item.indexOf(rdsName) >= 0)
+                                if(indexList.length > 0){
+                                    num = indexList.length + 1
+                                }
+                                
+                                rdsNum =  equipmentId + "-" +insertData.equipmentNo + num.toString().padStart(2, '0')
+                                rdsParent = equipmentId
+                            } 
+                        }
+                        else{
+                            // 検索する名称を抜き出し
+                            let rdsName = locationId + insertData.equipmentNo
+                            let indexList = Object.keys(rdsList).filter(item => item.indexOf(rdsName) >= 0)
+                            if(indexList.length > 0){
+                                num = indexList.length + 1
+                            }
+                            rdsNum = locationId + insertData.equipmentNo + num.toString().padStart(2, '0')
+                            rdsParent = locationId
+                        }
+        
+                        // RDS名を作成
+                        let rdsParam = {
+                            rdsReferenceDesignation:rdsNum,
+                            rdsName:insertData.equipmentName,
+                            rdsClassType:"Rds",
+                            rdsSiteCode:siteCode,
+                            rdsParentReferenceDesignation:rdsParent
+                        };
+        
+                        // RDS設定
+                        res = await apis.setRDS(misc,siteCode,rdsParam)
+                        
+                        // 各パラメータを取得
+                        let insertParam = {
+                            rds:[rdsNum],
+                            equipmentName:("equipmentName" in insertData) ? insertData.equipmentName : null,
+                            equipmentModel:("equipmentModel" in insertData) ? insertData.equipmentModel : null,
+                            machineNo:("machineNo" in insertData) ? insertData.machineNo : null,
+                            manufacturer:("manufacturer" in insertData) ? insertData.manufacturer : null,
+                            locationId:("locationId" in insertData) ? insertData.locationId : null,
+                            establishedDate:("establishedDate" in insertData) ? new Date(insertData.establishedDate) : null,
+                            madeDate:("madeDate" in insertData) ? new Date(insertData.madeDate) : null,
+                            assetNo:("assetNo" in insertData) ? insertData.assetNo : null,
+                            contactWay:("contactWay" in insertData) ? insertData.contactWay : null,
+                            retailer:("retailer" in insertData) ? insertData.retailer : null,
+                            runningStartDate:("runningStartDate" in insertData) ? new Date(insertData.runningStartDate) : null,
+                            usefulTime:("usefulTime" in insertData) ? insertData.usefulTime : null,
+                            exchangeCycle:("exchangeCycle" in insertData) ? insertData.exchangeCycle : null,
+                            exchangeCycleUnit:("exchangeCycleUnit" in insertData) ? insertData.exchangeCycleUnit : null,
+                            equipmentType:("equipmentType" in insertData) ? insertData.equipmentType : null,
+                            parentEquipmentId:("parentEquipmentId" in insertData) ? insertData.parentEquipmentId : null,
+                            asEquipmentRemark:("equipmentSpecification" in insertData) ? insertData.equipmentSpecification : null,
+                            fileName:idList,
+                        }
+
+                        let result = await apis.setAsset(misc,siteCode,insertParam)
+
+                        return result
+                    }
+
+                    
+                    return {err:"err"}
+                }
+                else{
+                    return {err : "locationId is null"}
+                }
+            }
+
+        }
+
+        return {err : "siteCode is null"}
+       
+    }
+    catch(e){
+        return {err:e.message}
+    }
+}
+// 設備削除
+async function equipmentDelete(){
+    try{
+        // 削除するデータIDを取得
+        let equipmentId = param.params
+        let res = await apis.searchAssetID(misc,equipmentId)
+        if(!("err" in res)){
+            // 設備情報取得
+            let siteCodeList = res.data
+
+            // ヒットした最初の設備を抜き出し
+            let assetCode = Object.keys(siteCodeList)[0];
+            let assetParam = siteCodeList[assetCode]
+
+            // 設備情報削除
+            let result = await apis.deleteAsset(misc,assetParam.asEquipmentSiteCode,equipmentId)
+
+            // RDS情報削除
+            result = await apis.deleteRDS(misc,assetParam.asEquipmentSiteCode,assetParam.asEquipmentReference[0])
+
+            // 添付ファイルがあるか?
+            let fileName = assetParam.asEquipmentTags.fileName
+            if(fileName != null){
+                let fileList = fileName.split(",")
+                for(let fileCount=0;fileCount<fileList.length;fileCount++){
+                    result = await apis.deleteDeviceFile(misc,assetParam.asEquipmentSiteCode,fileList[fileCount])
+                }
+            }
+
+            return result
+        }
+
+        return {err:"err"}
+    }
+    catch(e){
+        return {err:e.message}
+    }
+}
+
+// ファイル追加
+async function equipmentUpload(){
+    try{
+        //追加するデータIDを取得
+        let uploadData = param.params
+        //let result = await apis.createDeviceFile(misc,uploadData.siteCode,uploadData.fileName,uploadData.fileData)
+        let result = await apis.postDeviceFileBinaryData(misc,uploadData.siteCode,uploadData.fileName,uploadData.fileData)
+        return result
+    }
+    catch(e){
+        return {err:e.message}
+    }
+}
+
+//// 備品画面
+// マスター取得処理
+async function spareGetMaster(){
+    try{
+        let organizationId = await apis.getUser(misc)
+        let organizationName = await apis.getOrganizations(misc,organizationId)
+        // マスターデータの雛形
+        let masterData = {
+            organization:{
+                organizationName:organizationName,
+                sites:[],
+            },
+            spareType:[
+                {
+                    key:"予備品",
+                    value:"予備品"
+                },
+                {
+                    key:"交換品",
+                    value:"交換品"
+                },
+                {
+                    key:"循環品",
+                    value:"循環品"
+                },
+                {
+                    key:"消耗品",
+                    value:"消耗品"
+                },
+                {
+                    key:"付属品",
+                    value:"付属品"
+                },
+                {
+                    key:"予備品・付属品",
+                    value:"予備品・付属品"
+                },
+                {
+                    key:"予備品 (契約不含)",
+                    value:"予備品 (契約不含)"
+                }
+            ],
+            cycleUnit:[
+                {
+                    key:"年",
+                    value:"年"
+                },
+                {
+                    key:"月",
+                    value:"月"
+                },
+                {
+                    key:"週",
+                    value:"週"
+                },
+                {
+                    key:"日",
+                    value:"日"
+                }
+            ],
+            spareUnit:[
+                {
+                    key:"個",
+                    value:"個"
+                },
+                {
+                    key:"式",
+                    value:"式"
+                },
+                {
+                    key:"毎",
+                    value:"毎"
+                },
+                {
+                    key:"部",
+                    value:"部"
+                },
+                {
+                    key:"件",
+                    value:"件"
+                },
+                {
+                    key:"本",
+                    value:"本"
+                },
+                {
+                    key:"組",
+                    value:"組"
+                },
+                {
+                    key:"本／組",
+                    value:"本／組"
+                }
+            ],
+            inventoryClasses:[],
+            keepingPlaces:[],
+        }
+
+        // 権限があるサイトを取得
+        let res = await apis.getAllSite(misc)
+        if(!("err" in res)){
+            let siteList = res.data
+            for (var item in siteList ) {
+                // サイトコードに紐づく分類を取得
+                siteList[item].inventoryClasses=[]
+    
+                // サイトコードに紐づく場所を取得
+                siteList[item].keepingPlaces=[]
+    
+                // 備品一覧を取得
+                res = await apis.getSpareList(misc,item,[])
+                if(!("err" in res)){
+                    let SpareList = res.data
+                    for (var spare in SpareList ) {
+                        // 保管場所が設定されているか?
+                        if(SpareList[spare].asSpareLocation != null){
+                            // 同じ名称があるか?
+                            if(siteList[item].keepingPlaces.length > 0){
+                                let keys = siteList[item].keepingPlaces.find(item => item === SpareList[spare].asSpareLocation)
+                                if(keys == undefined){
+                                    siteList[item].keepingPlaces.push(SpareList[spare].asSpareLocation)
+                                }
+                            }
+                            else{
+                                siteList[item].keepingPlaces.push(SpareList[spare].asSpareLocation)
+                            }
+                            masterData.keepingPlaces = Object.assign(masterData.keepingPlaces, siteList[item].keepingPlaces);
+                        }
+                        
+                        // 備品分類が設定されているか?
+                        if("inventoryClass" in SpareList[spare].asSpareTags){
+                            if(SpareList[spare].asSpareTags.inventoryClass != null){
+                                // 同じ名称があるか?
+                                if(siteList[item].inventoryClasses.length > 0){
+                                    let keys = siteList[item].inventoryClasses.find(item => item === SpareList[spare].asSpareTags.inventoryClass)
+                                    if(keys == undefined){
+                                        siteList[item].inventoryClasses.push(SpareList[spare].asSpareTags.inventoryClass)
+                                    }
+                                }
+                                else{
+                                    siteList[item].inventoryClasses.push(SpareList[spare].asSpareTags.inventoryClass)
+                                }    
+                                masterData.inventoryClasses = Object.assign(masterData.inventoryClasses, siteList[item].inventoryClasses);
+                            }
+                        }
+                       
+                    }
+                }
+    
+                masterData.organization.sites.push(siteList[item])
+            }
+        }
+
+        return masterData
+    }
+    catch(e){
+        return {err:e.message}
+    }
+}
+// 検索
+async function spareSearch(){
+    try{
+        // 検索条件を取得
+        let conditions = param.params
+        let siteCode = ""
+        let spares={
+            rows:[],
+            count:0
+        }
+
+        // サイト名があるか?
+        if("siteName" in conditions){
+            // サイト名からサイトコードを取得
+            let siteName = conditions.siteName
+            if(siteName != null){
+                let res = await apis.searchSiteName(misc,siteName)
+                if(!("err" in res)){
+                    let siteCodeList = res.data
+                    siteCode = Object.keys(siteCodeList)[0];
+                }
+            }
+        }
+
+        // 検索条件まとめ
+        // プロパティ情報
+        let filter = ""
+        let keepingPlace = ("keepingPlace" in conditions) ? conditions.keepingPlace : ""
+        if(keepingPlace != "" && keepingPlace != null){
+            filter += `asSpareLocation=${keepingPlace}`
+        }
+
+        // タグ情報
+        let filter_tag = ""
+        let spareType = ("spareType" in conditions) ? conditions.spareType : ""
+        if(spareType != "" && spareType != null){
+            filter_tag += `spareType=${spareType}`
+        }
+        
+        let inventoryClass = ("inventoryClass" in conditions) ? conditions.inventoryClass : ""
+        if(inventoryClass != "" && inventoryClass != null){
+            if(filter_tag!=""){
+                filter_tag +="&"
+            }
+            filter_tag += `inventoryClass=${inventoryClass}`
+        }
+
+        // パラメータまとめ
+        let filterParam = {}
+        if(filter!=""){
+            filterParam.filter=filter
+        }
+        if(filter_tag!=""){
+            filterParam.tags_filter=filter_tag
+        }
+
+        let res = await apis.getSpareList(misc,siteCode,filterParam)
+        if(!("err" in res)){
+            let sparesList = res.data
+            for (var item in sparesList ) {
+                let siteName=""
+                let res = await apis.getSite(misc,sparesList[item].asSpareSiteCode)
+                if(!("err" in res)){
+                    siteName = res.data.siteName
+                }
+
+                if(sparesList[item].asSpareTags == null){
+                    sparesList[item].asSpareTags={}
+                }
+
+                let row = {
+                    spareId:sparesList[item].asSpareUniqueIdentifier,
+                    spareType:("spareType" in sparesList[item].asSpareTags) ? sparesList[item].asSpareTags.spareType : "",
+                    inventoryClass:("inventoryClass" in sparesList[item].asSpareTags) ? sparesList[item].asSpareTags.inventoryClass : "",
+                    spareNo:("spareNo" in sparesList[item].asSpareTags) ? sparesList[item].asSpareTags.spareNo : "",
+                    spareName:sparesList[item].asSparePartName,
+                    siteName:siteName,
+                    replacementCycle:("replacementCycle" in sparesList[item].asSpareTags) ? sparesList[item].asSpareTags.replacementCycle : "",
+                    replacementCycleUnit:("replacementCycleUnit" in sparesList[item].asSpareTags) ? sparesList[item].asSpareTags.replacementCycleUnit : "",
+                    updatedDate:("changedDate" in sparesList[item].asSpareTags)  && (sparesList[item].asSpareTags.changedDate != null)? sparesList[item].asSpareTags.changedDate : "",
+                    changedReason:("changedReason" in sparesList[item].asSpareTags) && (sparesList[item].asSpareTags.changedReason != null) ? sparesList[item].asSpareTags.changedReason : "",
+                    saftyStocks:sparesList[item].asSpareQty,
+                    spareUnit:sparesList[item]["asSpareQty.pfx"],
+                    currentStocks:("saftyStocks" in sparesList[item].asSpareTags) ? sparesList[item].asSpareTags.saftyStocks : "",
+                    keepingPlace:sparesList[item].asSpareLocation,
+                }
+                spares.rows.push(row)
+            }
+
+            // 備品番号でフィルター
+            let spareNo = ("spareNo" in conditions) ? conditions.spareNo : ""
+            if(spareNo != ""){
+                spares.rows = spares.rows.filter(item => item.spareNo.indexOf(spareNo) >= 0)
+            }
+
+            // 備品名称でフィルター
+            let spareName = ("spareName" in conditions) ? conditions.spareName : ""
+            if(spareName != "" && spareName != null){
+                spares.rows = spares.rows.filter(item => item.spareName.indexOf(spareName) >= 0)
+            }
+
+            spares.count = spares.rows.length
+        }
+        return spares
+    }
+    catch(e){
+        return {err:e.message}
+    }
+}
+
+// 追加
+async function spareCreate(){
+    try{
+        // 追加データを取得
+        let insertData = param.params
+
+        // 設備情報があるか?
+        if("equipmentSpares" in insertData){
+            // 添付ファイルのID取得
+            let idList = param.idList
+
+            // 設備を抜き出し
+            let equipment = insertData.equipmentSpares
+
+            // 最初の設備を抜き出し
+            let baseEquipment = equipment[0]
+
+            // 最初の設備のサイトに登録
+            let siteCode = baseEquipment.siteCode
+            let insertParam = {
+                spareNo:("spareNo" in insertData) ? insertData.spareNo : null,
+                spareName:("spareName" in insertData) ? insertData.spareName : null,
+                keepingPlace:("keepingPlace" in insertData) ? insertData.keepingPlace : null,
+                spareType:("spareType" in insertData) ? insertData.spareType : null,
+                inventoryClass:("inventoryClass" in insertData) ? insertData.inventoryClass : null,
+                saftyStocks:("saftyStocks" in insertData) ? insertData.saftyStocks : null,
+                machineNo:("machineNo" in insertData) ? insertData.machineNo : null,
+                replacementCycle:("replacementCycle" in insertData) ? insertData.replacementCycle : null,
+                replacementCycleUnit:("replacementCycleUnit" in insertData) ? insertData.replacementCycleUnit : null,
+                purchasePrice:("purchasePrice" in insertData) ? insertData.purchasePrice : null,
+                manufacturer:("manufacturer" in insertData) ? insertData.manufacturer : null,
+                contactAddress:("contactAddress" in insertData) ? insertData.contactAddress : null,
+                retailer:("retailer" in insertData) ? insertData.retailer : null,
+                remarks:("remarks" in insertData) ? insertData.remarks : null,
+                asSpareQty:("purchasePrice" in insertData) ? insertData.purchasePrice : null,
+                spareUnit:("saftyStocksUnit" in insertData) ? insertData.saftyStocksUnit: null,
+                fileName:idList,
+            }
+
+            let result = await apis.setSpare(misc,siteCode,insertParam)
+            let list=[]
+
+            if(!("err" in result)){
+                // ID抜き出し
+                let spare_id = result.data.spare_id
+
+                // 設備数だけ繰り返し
+                for(let count=0;count < equipment.length;count++){
+                    let equipmentId = equipment[count].equipmentId
+
+                    // 大本の設備を取得
+                    let res = await apis.searchAssetID(misc,equipmentId)
+                    if(!("err" in res)){
+                        let equipmentList = res.data
+                        let assetCode = Object.keys(equipmentList)[0];
+                        let equipmentData = equipmentList[assetCode]
+    
+                        // 予備品IDがあるか？
+                        let update={
+                            asEquipmentSiteCode: siteCode,
+                            asEquipmentSpareParts:[]
+                        }
+    
+                        if("asEquipmentSpareParts" in equipmentData){
+                            update.asEquipmentSpareParts = equipmentData.asEquipmentSpareParts
+                        }
+                        update.asEquipmentSpareParts.push(spare_id)
+    
+                        result = await apis.updateAsset(misc,equipmentId,update)
+                        list.push(result)
+                    }
+                }
+            }
+
+            return {result:list}
+        }
+
+        return {err:"equipmentSpares none"}
+    }
+    catch(e){
+        return {err:e.message}
+    }
+}
+
+// 予備品削除
+async function spareDelete(){
+    try{
+        // 削除するデータIDを取得
+        let spare_id = param.params
+
+        // 予備品情報取得
+        let res = await apis.searchSpareID(misc,spare_id)
+        if(!("err" in res)){
+            let siteCodeList = res.data
+            // ヒットした最初の予備品を抜き出し
+            let assetCode = Object.keys(siteCodeList)[0];
+            let assetParam = siteCodeList[assetCode]
+
+            // 予備品情報削除
+            let result = await apis.deleteSpare(misc,assetParam.asSpareSiteCode,spare_id)
+
+            // 添付ファイルがあるか?
+            let fileName = assetParam.asSpareTags.fileName
+            if(fileName != null){
+                let fileList = fileName.split(",")
+                for(let fileCount=0;fileCount<fileList.length;fileCount++){
+                    result = await apis.deleteDeviceFile(misc,assetParam.asSpareSiteCode,fileList[fileCount])
+                }
+            }
+
+            return result
+        }
+
+        return {err:"err"}
+    }
+    catch(e){
+        return {err:e.message}
+    }
+}
+
+//// 作業管理画面
+// マスター取得処理
+async function workGetMaster(){
+    try{
+        // ユーザートークンから組織を割り出す
+        let organizationId = await apis.getUser(misc)
+        let organizationName = await apis.getOrganizations(misc,organizationId)
+        let organizationNameBySelecetedSiteCode;
+        let res;
+
+        // マスターデータの雛形
+        let masterData = {
+            organization:{
+                organizationId:organizationId,
+                organizationName:organizationName,
+                sites:[],
+            },
+            equipmentTypes:[
+                {
+                    key:"器具",
+                    value:"器具"
+                },
+                {
+                    key:"盤",
+                    value:"盤"
+                },
+                {
+                    key:"装置",
+                    value:"装置"
+                },
+                {
+                    key:"設置場所",
+                    value:"設置場所"
+                },
+                {
+                    key:"その他",
+                    value:"その他"
+                }
+            ],
+            jobCategories:[
+                {
+                    key: "1",
+                    value: "臨時点検"
+                },
+                {
+                    key: "2",
+                    value: "日常点検"
+                },
+                {
+                    key: "3",
+                    value: "臨時点検"
+                },
+                {
+                    key: "4",
+                    value: "巡視点検"
+                },
+                {
+                    key: "5",
+                    value: "定期点検"
+                },
+                {
+                    key: "6",
+                    value: "年次点検"
+                },
+                {
+                    key: "7",
+                    value: "メーカー点検"
+                },
+                {
+                    key: "8",
+                    value: "障害対応"
+                },
+                {
+                    key: "9",
+                    value: "その他"
+                }
+            ],
+            workPrioritys:[
+                {
+                    key: "Low",
+                    value: "低め"
+                },
+                {
+                    key: "Normal",
+                    value: "通常"
+                },
+                {
+                    key: "High",
+                    value: "高め"
+                },
+                {
+                    key: "Urgent",
+                    value: "急いで"
+                },
+                {
+                    key: "Immediate",
+                    value: "今すぐ"
+                }
+            ],
+            planItemStatus:[
+                {
+                    key: "1",
+                    value: "未処置"
+                },
+                {
+                    key: "2",
+                    value: "進行中"
+                },
+                {
+                    key: "3",
+                    value: "不要"
+                },
+                {
+                    key: "4",           
+                    value: "完了"
+                }
+            ],
+            workStatus:[
+                {
+                    key: 1,
+                    value: "未処置"
+                },
+                {
+                    key: 2,
+                    value: "作業進行中"
+                },
+                {
+                    key: 3,
+                    value: "作業済"
+                },
+                {
+                    key: 4,
+                    value: "作業不要"
+                },
+                {
+                    key: 5,
+                    value: "作業完了"
+                }
+            ],
+            reciprocalPersons:[
+                {
+                    key: "1",
+                    value: "対応者 1"
+                },
+                {
+                    key: "2",
+                    value: "対応者 2"
+                },
+                {
+                    key: "3",
+                    value: "対応者 3"
+                },
+                {
+                    key: "4",
+                    value: "対応者 4"
+                }
+            ],
+            planItemPrioritys:[
+                {
+                    key: "1",
+                    value: "停止"
+                },
+                {
+                    key: "2",
+                    value: "発電"
+                }
+            ],
+            calendarColors: [
+                {
+                  background: "#f86056",
+                  color: "#1a1a1a",
+                  jobCategory: ["1", "8"],
+                  label: "臨時点検・障害対応"
+                },
+                {
+                  background: "#0045ff",
+                  color: "#ffffff",
+                  jobCategory: ["5"],
+                  label: "月次点検"
+                },
+                {
+                  background: "#00b275",
+                  color: "#1a1a1a",
+                  jobCategory: ["6"],
+                  label: "年次点検"
+                },
+                {
+                  background: "#0096e1",
+                  color: "#1a1a1a",
+                  jobCategory: ["2", "3", "4"],
+                  label: "巡視・日常・目視点検"
+                },
+                {
+                  background: "#e26507",
+                  color: "#1a1a1a",
+                  jobCategory: ["7"],
+                  label: "メーカー点検"
+                },
+                {
+                  background: "#c7a800",
+                  color: "#1a1a1a",
+                  jobCategory: ["9", "unknown"],
+                  label: "その他作業"
+                },
+                {
+                  background: "#0096e1",
+                  color: "#1a1a1a",
+                  jobCategory: ["repeat"],
+                  label: "繰り返し設定"
+                }
+            ],
+        }
+    
+        // 全ユーザ情報取得
+        res = await apis.getAllUser(misc,organizationId)
+        if (!("err" in res)) {
+            let userList = res;
+            let newReciprocalPersons = [];
+            for (let key in userList) {
+                let row = {
+                    key: key,
+                    value: userList[key]["psUserName"]
+                };
+                newReciprocalPersons.push(row);
+            }
+            masterData.reciprocalPersons = masterData.reciprocalPersons.concat(newReciprocalPersons);
+        }
+
+        // res = await apis.getAllSite(misc)
+        // if(!("err" in res)){
+        //     let siteList = res.data
+        //     for (let item in siteList ) {
+        //         masterData.organization.sites.push(siteList[item])
+        //     }
+        // }
+        
+        // siteOrganizationId:"A8AMS9KP3D0Q97X6KC9FWQQPQC"
+        // 権限があるサイトを取得
+        res = await apis.getAllSite(misc)
+        if(!("err" in res)){
+            let siteList = res.data
+            for (var item in siteList ) {
+                // サイトコードに紐づく場所を取得
+                siteList[item].locations=[]
+    
+                // サイトコードに紐づく装置IDを取得
+                siteList[item].equipments=[]
+                
+                // 親が01のRDSプロパティを取得
+                let filterParam={
+                    filter:'rdsParentReferenceDesignation=01'
+                }
+                res = await apis.getRDS(misc,siteList[item].siteCode,filterParam)
+                if(!("err" in res)){
+                    let rdsList = res.data
+                    for (var rds in rdsList ) {
+    
+                        // 場所の名称を設定
+                        let oneLocat = {
+                            locationName:rdsList[rds].rdsName,
+                            locationId:rdsList[rds].rdsName
+                        }
+        
+                        // 場所の配下にある装置を取得
+                        let filterParam={
+                            filter:'rdsParentReferenceDesignation=' + rds
+                        }
+                        oneLocat.equipments=[]
+                        res = await apis.getRDS(misc,siteList[item].siteCode,filterParam)
+                        if(!("err" in res)){
+                            let locationList = res.data
+                            for (var location in locationList ) {
+                                // 装置名称を設定
+                                let oneEquipment = {
+                                    equipmentName:locationList[location].rdsName,
+                                    equipmentId:locationList[location].rdsName,
+                                }
+                                oneLocat.equipments.push(oneEquipment)
+            
+                                // 名称を抜き出し
+                                let rdsName = locationList[location].rdsName
+            
+                                // 同じ名称があるか?
+                                if(siteList[item].equipments.length > 0){
+                                    let keys = siteList[item].equipments.find(item => item.equipmentName === rdsName)
+                                    if(keys == undefined){
+                                        siteList[item].equipments.push(oneEquipment)
+                                    }
+                                }
+                                else{
+                                    siteList[item].equipments.push(oneEquipment)
+                                }
+                            }
+                            siteList[item].locations.push(oneLocat)
+                        }
+                    }
+                }
+                let processedSite = siteList[item];
+                res = await apis.getWorkListBySiteCode(misc, siteList[item].siteCode);
+                let workList = res.data;
+                res = await apis.getOrganizations(misc,siteList[item].siteOrganizationId)
+                organizationNameBySelecetedSiteCode = res
+                
+                // サイトコードに紐づく作業を取得
+                siteList[item].planParents=[];
+                for (let index in workList) {
+                    let onePlanParent = {
+                        "actionPlanId": workList[index].actionPlanId,
+                        "actionPlanTitle": workList[index].actionPlanTitle
+                    };
+                    siteList[item].planParents.push(onePlanParent);
+                }
+
+                // サイトコードに紐づくサイト情報を取得
+                let selectedSiteInfo = {
+                    ...processedSite,
+                    "organizationName": organizationNameBySelecetedSiteCode
+                };
+                siteList[item] = selectedSiteInfo;
+
+                masterData.organization.sites.push(siteList[item])
+            }
+        }
+
+        // res = await apis.getAllSite(misc)
+        // if (!("err" in res)) {
+        //     let siteList = res.data;
+        //     for (let item in siteList) {
+        //         let processedSite = siteList[item];
+        //         res = await apis.getWorkListBySiteCode(misc, siteList[item].siteCode);
+        //         if (!("err" in res)) {
+        //             let workList = res.data;
+        //             res = await apis.getOrganizations(misc,siteList[item].siteOrganizationId)
+        //             let tmp = {
+        //                 ...processedSite,
+        //                 "organizationName": res
+        //             };
+        //             // masterData.organization.organizationName = res;
+        //             let planParentsArray = [];
+        //             for (let item in workList) {
+        //                 const planParent = {
+        //                     "actionPlanId": workList[item].actionPlanId,
+        //                     "actionPlanTitle": workList[item].actionPlanTitle
+        //                 };
+        //                 planParentsArray.push(planParent);
+        //             }
+        //             const allproperties = {
+        //                 ...tmp,
+        //                 "equipments": [],
+        //                 "locations": [], 
+        //                 "planParents": planParentsArray
+        //             };
+        //             masterData.organization.sites.push(allproperties);
+        //         }
+        //     }
+        // }
+
+        return masterData
+
+    }
+    catch(e){
+        return {err:e.message}
+    }
+}
+
+// 作業検索
+async function workSearch(){
+    try{
+        // 検索条件を取得
+        let conditions = param.params
+
+        let siteCode = ""
+        let organizationId = ""
+        let organizationName = ""
+        let equipmentName = ""
+        let startDaytime = ""
+        let endDaytime = ""
+        let res;
+        let message_equip = ""
+        let resTest = ""
+
+        message_equip += "1"
+        //TODO siteCode -> organizationId ->  organizationName pickup
+        if("siteCode" in conditions){
+            siteCode = conditions['siteCode']
+        }
+        // milisecond削除処理(APIの形式合わせ)
+        if("actionPlanStartDaytime" in conditions){
+            startDaytime = conditions['actionPlanStartDaytime']
+            startDaytime = startDaytime.replace('.000Z', 'Z');
+        }
+        if("actionPlanEndDaytime" in conditions){
+            endDaytime = conditions['actionPlanEndDaytime']
+            endDaytime = endDaytime.replace('.000Z', 'Z');
+        }
+
+        let jobs={
+            rows:[],
+            count:0
+        }
+
+        message_equip += "2"
+        // siteCodeを利用してorganizationIdを取得
+        
+        if(siteCode != null){
+            res = await apis.getSite(misc,siteCode)
+            if(!("err" in res)){
+                message_equip += "3"
+                organizationId = res.data.siteOrganizationId
+                // organizationIdを利用してorganizationNameを取得
+                res = await apis.getOrganizations(misc,organizationId)
+                organizationName = res
+            }
+        }
+        
+
+        // サイト名があるか?
+        // if("siteName" in conditions){
+        //     // サイト名からサイトコードを取得
+        //     let siteName = conditions.siteName
+        //     if(siteName != null){
+        //         let res = await apis.searchSiteName(misc,siteName)
+        //         if(!("err" in res)){
+        //             let siteCodeList = res.data
+        //             siteCode = Object.keys(siteCodeList)[0];
+        //         }
+        //     }
+        // }
+
+        message_equip += "4"
+        // 検索条件まとめ
+        // プロパティ情報
+        let filter = ""
+
+        // 作業種別フィルター
+        let workCategoryFilter = ("pvJobCategory" in conditions) ? conditions['pvJobCategory'] : ""
+            if(workCategoryFilter != ""){
+                if(filter!=""){
+                    filter +="&"
+                }
+                filter += `actionPlanClassType=${workCategoryFilter}`
+            }
+        // 設備名称フィルター
+        // response例 actionPlanRelatedObject [array]
+        // actionPlanRelatedObject: [
+        //     'site:DUMMY-SITE2',
+        //     'equipment:DZhZbOhxS1muGcjJeMiXXX'
+        // ]
+        let equipIDFilter = ("equipmentId" in conditions) ? conditions['equipmentId'] : ""
+            if(equipIDFilter != ""){
+                if(filter!=""){
+                    filter +="&"
+                }
+                let equipIDArrayFilter = 'equipment:' + equipIDFilter
+                filter += `actionPlanRelatedObject=${equipIDArrayFilter}`
+            }
+        // 作業名称フィルター
+        let workTitleFilter = ("actionPlanTitle" in conditions) ? conditions['actionPlanTitle'] : ""
+            if(workTitleFilter != ""){
+                if(filter!=""){
+                    filter +="&"
+                }
+                filter += `actionPlanTitle=${workTitleFilter}`
+            }
+        // ステータスフィルター
+        let statusFilter = ("status" in conditions) ? conditions['status'] : ""
+            if(statusFilter != ""){
+                if(filter!=""){
+                    filter +="&"
+                }
+                filter += `jobStatus=${statusFilter.toString()}`
+            }
+        // // 点検開始日時フィルター
+        // let startTimeFilter = ("actionPlanStartDaytime" in conditions) ? conditions['actionPlanStartDaytime'] : ""
+        // if(startTimeFilter != ""){
+        //     if(filter!=""){
+        //         filter +="&"
+        //     }
+        //     startTimeFilter = startTimeFilter.replace('.000Z', 'Z');
+        //     filter += `actionPlanStartDaytime[gte]=${startTimeFilter}`
+        // }
+        // // 点検終了日時フィルター
+        // let endTimeFilter = ("actionPlanEndDaytime" in conditions) ? conditions['actionPlanEndDaytime'] : ""
+        // if(endTimeFilter != ""){
+        //     if(filter!=""){
+        //         filter +="&"
+        //     }
+        //     endTimeFilter = endTimeFilter.replace('.000Z', 'Z');
+        //     filter += `actionPlanEndDaytime=${endTimeFilter}`
+        // }
+
+        // // タグ情報
+        // let filter_tag = ""
+        // let spareType = ("spareType" in conditions) ? conditions.spareType : ""
+        // if(spareType != "" && spareType != null){
+        //     filter_tag += `spareType=${spareType}`
+        // }
+
+        // パラメータまとめ
+        let filterParam = {}
+        if(filter!=""){
+            filterParam.filter=filter
+        }
+        // if(filter_tag!=""){
+        //     filterParam.tags_filter=filter_tag
+        // }
+
+        message_equip += "6"
+        res = await apis.getWorkList(misc,siteCode,filterParam)
+        if(!("err" in res)){
+            let worksList = res.data
+            for (var item in worksList ) {
+                let siteName=""
+                message_equip += "7"
+                let res = await apis.getSite(misc,worksList[item].actionPlanSiteCode)
+                if(!("err" in res)){
+                    siteName = res.data.siteName
+                }
+
+                if(worksList[item].actionPlanTags == null){
+                    worksList[item].actionPlanTags={}
+                }
+
+                if(worksList[item].actionPlanRelatedObject == null){
+                    worksList[item].actionPlanRelatedObject={}
+                } else{
+                    equipmentId = worksList[item].actionPlanRelatedObject
+                    for (var obj of worksList[item].actionPlanRelatedObject){
+                        if (obj.startsWith("equipment:")) {
+                            equipmentId = obj.substring("equipment:".length);
+                            break
+                        }
+                    }
+                }
+                
+                message_equip += "8"
+                // (作業)関連オブジェクトに紐づく(設備)設備名
+                if(equipmentId != ""){
+                    let res = await apis.searchEquipmentSiteCode(misc,equipmentId)
+                    if(!("err" in res)){
+                        message_equip += "success"
+                        equipmentName = res.data.asEquipmentProductName
+                    } else{
+                        message_equip += "fail"
+                    }
+                }
+                message_equip += "9"
+
+                let row = worksList[item]
+                // 検索結果
+                // 事業主
+                row['organizationName'] = organizationName;
+                // サイト名称
+                row['siteName'] = siteName;
+                // 作業種別
+                row['pvJobCategory'] = worksList[item].actionPlanClassType;
+                // 設備名称
+                row['equipmentName'] = equipmentName;
+              
+                // TODO Debug用
+                row['message_equip'] = message_equip;
+                row['conditions'] = conditions;
+                
+                // 点検(開始/終了)日時フィルター
+                if (worksList[item].actionPlanStartDaytime === null || (!startDaytime && !endDaytime)) {
+                    jobs.rows.push(row);
+                } else {
+                    let startCondition = true;
+                    let endCondition = true;
+
+                    if (startDaytime) {
+                        startCondition = new Date(worksList[item].actionPlanStartDaytime) >= new Date(startDaytime);
+                        jobs.startCondition = {}
+                    }
+
+                    if (endDaytime) {
+                        endCondition = new Date(worksList[item].actionPlanEndDaytime) <= new Date(endDaytime);
+                        jobs.endDaytime = {}
+                    }
+            
+                    if (startCondition && endCondition) {
+                        jobs.rows.push(row);
+                    }
+                }
+            }
+
+            // 備品番号でフィルター
+            // let spareNo = ("spareNo" in conditions) ? conditions.spareNo : ""
+            // if(spareNo != ""){
+            //     jobs.rows = jobs.rows.filter(item => item.spareNo.indexOf(spareNo) >= 0)
+            // }
+
+            // // 備品名称でフィルター
+            // let equipmentName = ("equipmentName" in conditions) ? conditions.equipmentName : ""
+            // if(equipmentName != "" && equipmentName != null){
+            //     jobs.rows = jobs.rows.filter(item => item.equipmentName.indexOf(equipmentName) >= 0)
+            // }
+
+            jobs.count = jobs.rows.length
+            jobs.filtercheck = filterParam
+        }
+        return jobs.rows
+    }
+    catch(e){
+        return {err:e.message}
+    }
+}
+
+// 作業カテゴリー検索
+async function workGetRegisteredJobCategories(){
+    try{
+        // 検索条件を取得
+        let conditions = param.params
+        let siteCode = ""
+        if("siteCode" in conditions){
+            siteCode = conditions['siteCode']
+        }
+        let jobs={
+            rows:[],
+            count:0
+        }
+
+        // サイト名があるか?
+        if("siteName" in conditions){
+            // サイト名からサイトコードを取得
+            let siteName = conditions.siteName
+            if(siteName != null){
+                let res = await apis.searchSiteName(misc,siteName)
+                if(!("err" in res)){
+                    let siteCodeList = res.data
+                    siteCode = Object.keys(siteCodeList)[0];
+                }
+            }
+        }
+
+        // 検索条件まとめ
+        // // プロパティ情報
+        // let filter = ""
+        // let keepingPlace = ("keepingPlace" in conditions) ? conditions.keepingPlace : ""
+        // if(keepingPlace != "" && keepingPlace != null){
+        //     filter += `asSpareLocation=${keepingPlace}`
+        // }
+
+        // // タグ情報
+        // let filter_tag = ""
+        // let spareType = ("spareType" in conditions) ? conditions.spareType : ""
+        // if(spareType != "" && spareType != null){
+        //     filter_tag += `spareType=${spareType}`
+        // }
+        
+        // let inventoryClass = ("inventoryClass" in conditions) ? conditions.inventoryClass : ""
+        // if(inventoryClass != "" && inventoryClass != null){
+        //     if(filter_tag!=""){
+        //         filter_tag +="&"
+        //     }
+        //     filter_tag += `inventoryClass=${inventoryClass}`
+        // }
+
+        // // パラメータまとめ
+        // let filterParam = {}
+        // if(filter!=""){
+        //     filterParam.filter=filter
+        // }
+        // if(filter_tag!=""){
+        //     filterParam.tags_filter=filter_tag
+        // }
+
+        let res = await apis.getWorkList(misc,siteCode)
+        if(!("err" in res)){
+            let worksList = res.data
+            for (var item in worksList ) {
+                let siteName=""
+                let res = await apis.getSite(misc,worksList[item].actionPlanSiteCode)
+                if(!("err" in res)){
+                    siteName = res.data.siteName
+                }
+
+                /*if(worksList[item].asSpareTags == null){
+                    worksList[item].asSpareTags={}
+                }*/
+              
+                let row = worksList[item].actionPlanClassType
+                /*let row = {
+                    workId:worksList[item].actionPlanId,
+                    allproperties:worksList[item],
+                    pvJobCategory:worksList[item].pvJobCategory,
+                    siteCode1:conditions,
+                    siteCode2:conditions.siteCode,
+                    siteCode3:conditions["siteCode"],
+                    siteCode4:conditions['siteCode'],
+                }*/
+                // let row = {
+                //     spareId:worksList[item].asSpareUniqueIdentifier,
+                //     spareType:("spareType" in worksList[item].asSpareTags) ? worksList[item].asSpareTags.spareType : "",
+                //     inventoryClass:("inventoryClass" in worksList[item].asSpareTags) ? worksList[item].asSpareTags.inventoryClass : "",
+                //     spareNo:("spareNo" in worksList[item].asSpareTags) ? worksList[item].asSpareTags.spareNo : "",
+                //     spareName:worksList[item].asSparePartName,
+                //     siteName:siteName,
+                //     replacementCycle:("replacementCycle" in worksList[item].asSpareTags) ? worksList[item].asSpareTags.replacementCycle : "",
+                //     replacementCycleUnit:("replacementCycleUnit" in worksList[item].asSpareTags) ? worksList[item].asSpareTags.replacementCycleUnit : "",
+                //     updatedDate:("changedDate" in worksList[item].asSpareTags)  && (worksList[item].asSpareTags.changedDate != null)? worksList[item].asSpareTags.changedDate : "",
+                //     changedReason:("changedReason" in worksList[item].asSpareTags) && (worksList[item].asSpareTags.changedReason != null) ? worksList[item].asSpareTags.changedReason : "",
+                //     saftyStocks:worksList[item].asSpareQty,
+                //     spareUnit:worksList[item]["asSpareQty.pfx"],
+                //     currentStocks:("saftyStocks" in worksList[item].asSpareTags) ? worksList[item].asSpareTags.saftyStocks : "",
+                //     keepingPlace:worksList[item].asSpareLocation,
+                // }
+                jobs.rows.push(row)
+            }
+
+            // 備品番号でフィルター
+            // let spareNo = ("spareNo" in conditions) ? conditions.spareNo : ""
+            // if(spareNo != ""){
+            //     jobs.rows = jobs.rows.filter(item => item.spareNo.indexOf(spareNo) >= 0)
+            // }
+
+            // // 備品名称でフィルター
+            // let equipmentName = ("equipmentName" in conditions) ? conditions.equipmentName : ""
+            // if(equipmentName != "" && equipmentName != null){
+            //     jobs.rows = jobs.rows.filter(item => item.equipmentName.indexOf(equipmentName) >= 0)
+            // }
+
+            jobs.count = jobs.rows.length
+        }
+        return jobs.rows
+    }
+    catch(e){
+        return {err:e.message}
+    }
+}
+
+// 作業詳細取得
+async function workDetails(){
+    try{
+        // TODO erase
+        let debug_message = "First"
+        // 検索条件を取得
+        let res;
+        let conditions = param.params
+        let siteCode = ""
+        let actionPlanId = ""
+        let userName = ""
+        let siteName=""
+        let eventId=""
+        if("siteCode" in conditions){
+            siteCode = conditions['siteCode']
+        }
+        if("actionPlanId" in conditions){
+            actionPlanId = conditions['actionPlanId']
+        }
+
+        let jobs={
+            rows:[],
+            count:0
+        }
+
+        // // ユーザートークンから組織を割り出す
+        // let organizationId = await apis.getUser(misc)
+        // let organizationName = await apis.getOrganizations(misc,organizationId)
+
+        // siteCodeを利用してorganizationIdを取得
+        let resTest = ""
+        if(siteCode != null){
+            res = await apis.getSite(misc,siteCode)
+            
+            if(!("err" in res)){
+                organizationId = res.data.siteOrganizationId
+                resTest = organizationId
+                // organizationIdを利用してorganizationNameを取得
+                res = await apis.getOrganizations(misc,organizationId)
+                organizationName = res
+                resTest = organizationName
+            }
+        }
+
+
+        // リターンデータまとめ
+        res = await apis.getWorkDetails(misc,siteCode,actionPlanId)
+        if(!("err" in res)){
+            let worksDetails = res.data
+            let tmpJobCategory;
+            // worksDetails.actionPlanClassTypeを文字から数字に変換する場合、数字ではない場合
+            if ("actionPlanClassType" in worksDetails && !isNaN(Number(worksDetails.actionPlanClassType))) {
+                tmpJobCategory = worksDetails.actionPlanClassType;
+            } else {
+                tmpJobCategory = "5";
+            }
+            
+            let tmpActionPlanRelatedObject;
+            if ("actionPlanRelatedObject" in worksDetails && worksDetails.actionPlanRelatedObject != null) {
+                let actionPlanRelatedObjectList = worksDetails.actionPlanRelatedObject;
+                if (actionPlanRelatedObjectList != null) {
+                    for (let item of actionPlanRelatedObjectList){
+                        if (item.startsWith("equipment:")) {
+                            equipmentId = item.substring("equipment:".length);
+                            // 設備IDで(設備名称,メーカ,設置場所)情報取得
+                            res = await apis.searchAssetID(misc,equipmentId)
+                            if(!("err" in res)){
+                                let equipRow = {
+                                    equipmentName: res.data[equipmentId].asEquipmentProductName,
+                                    manufacturer: res.data[equipmentId].asEquipmentManufacturer,
+                                    locationName: res.data[equipmentId].asEquipmentLocation
+                                }
+                                tmpActionPlanRelatedObject.push(equipRow)
+                            }
+                        }
+                    }
+                }
+            } else {
+                tmpActionPlanRelatedObject = [];
+            }
+
+            let tmpActionPlanRelatedEvent;
+            if ("actionPlanRelatedEvent" in worksDetails && worksDetails.actionPlanRelatedEvent != null) {
+                let tmpActionPlanRelatedEventList = worksDetails.actionPlanRelatedEvent;
+                let tmpEventList = [];
+                for (let item of tmpActionPlanRelatedEventList){
+                    eventId = item;
+                    // 設備IDで(発生日時,発生内容)情報取得
+                    res = await apis.searchEventID(misc,siteCode,eventId)
+                    if(!("err" in res)){
+                        let eventRow = {
+                            evEventId: res.data[eventId].evEventId,
+                            evEventTimeStamp: res.data[eventId].evEventTimeStamp,
+                            evEventTitle: res.data[eventId].evEventTitle
+                        }
+                        tmpEventList.push(eventRow)
+                    }
+                }
+                tmpActionPlanRelatedEvent = tmpEventList;
+            } else {
+                tmpActionPlanRelatedEvent = ["No Data Event"];
+            }
+
+            // 関連ドキュメント（外観写真・エリア図など)の情報取得
+            let tmpActionPlanAttachedFiles;
+            if ("actionPlanAttachedFile" in worksDetails && worksDetails.actionPlanAttachedFile != null) {
+                let tmpActionPlanAttachedFileList = worksDetails.actionPlanAttachedFile;
+                if (tmpActionPlanAttachedFileList != null) {
+                    let flFileList = [];
+                    for (let i = 0; i < tmpActionPlanAttachedFileList.length; i++) {
+                        let item = tmpActionPlanAttachedFileList[i];
+                        let flFileName = item.flFileName;
+                        let flFileId = item.flFileId;
+                        let equipRow = {
+                            flFileId: flFileId, 
+                            flFileName: flFileName,
+                            name: flFileName
+                        };
+                        flFileList.push(equipRow);
+                    }
+                    tmpActionPlanAttachedFiles = flFileList;
+                }
+            } else {
+                tmpActionPlanAttachedFiles = [];
+            }
+
+            let tmpActionPlanItems;
+            if ("actionPlanItems" in worksDetails && worksDetails.actionPlanItems != null) {
+                let tmpActionPlanItemsList = worksDetails.actionPlanItems;
+                convertActionPlanItemPriority = {
+                    "Low":"停止",
+                    "Normal":"発電",
+                }
+                convertActionPlanItemStatus = {
+                    "1":"未処置",
+                    "2":"進行中",
+                    "4":"不要",
+                    "5":"完了",
+                }
+                for (let i = 0; i < tmpActionPlanItemsList.length; i++) {
+                    let item = tmpActionPlanItemsList[i]
+                    if (item.actionPlanItemPriority in convertActionPlanItemPriority) {
+                        item.actionPlanItemPriority = convertActionPlanItemPriority[item.actionPlanItemPriority];
+                    }
+                    if (item.actionPlanItemStatus in convertActionPlanItemStatus) {
+                        item.actionPlanItemStatus = convertActionPlanItemStatus[item.actionPlanItemStatus];
+                    }
+                }
+                tmpActionPlanItems = tmpActionPlanItemsList;
+            } else {
+                tmpActionPlanItems = [];
+            }
+
+            let row = {
+                // 作業種別 actionPlanClassType : "Job" -> "5" 変更予定
+                // TODO 画面出力のため強制挿入
+                pvJobCategory: tmpJobCategory,
+                // 作業名称
+                actionPlanTitle:("actionPlanTitle" in worksDetails) ? worksDetails.actionPlanTitle : "XXX2",
+                // 優先度
+                actionPlanPriorityId:("actionPlanPriority" in worksDetails) ? worksDetails.actionPlanPriority : "XXX3",
+                // TODO 画面出力のため強制挿入
+                // actionPlanPriorityId: "4",
+                // 委託ベンダ
+                contractVendorName:("contractVendor" in worksDetails.actionPlanTags) ? worksDetails.actionPlanTags.contractVendor : "XXX4",
+                // 詳細
+                actionPlanDetails:("actionPlanDetails" in worksDetails) ? worksDetails.actionPlanDetails : "XXX5",
+                // 作業ステータス
+                jobStatus:("jobStatus" in worksDetails) ? worksDetails.jobStatus : "XXX6",
+                // 開始日時
+                actionPlanStartDaytime:("actionPlanStartDaytime" in worksDetails) ? worksDetails.actionPlanStartDaytime : "",
+                // 終了日時
+                actionPlanEndDaytime:("actionPlanEndDaytime" in worksDetails) ? worksDetails.actionPlanEndDaytime : "",
+                // 親作業名称
+                actionPlanParentId:("actionPlanParentId" in worksDetails) ? worksDetails.actionPlanParentId : "XXX9",
+                // 設備名称
+                // actionPlanRelatedObject:("actionPlanRelatedObject" in worksDetails) ? worksDetails.actionPlanRelatedObject : [],
+                actionPlanRelatedObject:tmpActionPlanRelatedObject,
+                // 関連障害情報
+                // actionPlanRelatedEvent:("actionPlanRelatedEvent" in worksDetails) ? worksDetails.actionPlanRelatedEvent : [],
+                actionPlanRelatedEvent:tmpActionPlanRelatedEvent,
+                // 作業アイテム TODO
+                // actionPlanItems:("actionPlanItems" in worksDetails) ? worksDetails.actionPlanItems : [],
+                actionPlanItems:tmpActionPlanItems,
+                // 関連ドキュメント（外観写真・エリア図など)
+                // actionPlanAttachedFiles:("actionPlanAttachedFiles" in worksDetails) ? worksDetails.actionPlanAttachedFiles : [],
+                actionPlanAttachedFiles:tmpActionPlanAttachedFiles,
+                
+                // DEBUG用
+                AllProperties: worksDetails
+            }
+
+            // 事業主名
+            row['organizationName'] = organizationName;
+            // 作業ID
+            row['actionPlanId'] = actionPlanId;
+            // 対応者
+            let userId = ""
+            if(worksDetails.actionPlanUpdatedBy != null){
+                if (worksDetails.actionPlanUpdatedBy.startsWith("user:")) {
+                    userId = worksDetails.actionPlanUpdatedBy.substring("user:".length);
+                    row['correspondingPersonId'] = userId;
+                }
+                userName = await apis.getUserName(misc, userId)
+                if(userName != null){
+                    row['correspondingPersonName'] = userName;
+                }
+            }
+            // サイト名称
+            res = await apis.getSite(misc,worksDetails.actionPlanSiteCode)
+                if(!("err" in res)){
+                    siteName = res.data.siteName
+                    row['siteName'] = siteName;
+                }
+            
+            if ("actionPlanRelatedObject" in worksDetails) {
+                let actionPlanRelatedObjectList = worksDetails.actionPlanRelatedObject;
+                for (let item of actionPlanRelatedObjectList){
+                    if (item.startsWith("equipment:")) {
+                        equipmentId = item.substring("equipment:".length);
+                        break
+                    }
+                }
+            }
+
+            // TODO Debug用
+            row['conditions'] = conditions;
+            row['Z_messageCheck'] = debug_message;
+            row['Z_A'] = worksDetails.actionPlanUpdatedBy;
+            row['Z_B'] = worksDetails["actionPlanUpdatedBy"];
+            row['Z_C'] = worksDetails['actionPlanUpdatedBy'];
+            row['Z_eventId'] = eventId;
+            row['Z_resTest'] = resTest;
+
+            jobs.rows.push(row)
+        } 
+
+        return jobs.rows[0]
+    }
+    catch(e){
+        return {err:e.message}
+    }
+}
+
+// 作業プラン取得
+async function workPlans(){
+    try{
+        let conditions = param.params
+        let siteCode = ""
+        let siteName = ""
+        if("siteCode" in conditions){
+            siteCode = conditions['siteCode']
+        }
+
+        let input_pvJobCategory = "";
+        let input_locationName = "";
+        let input_parentEquipmentName = "";
+
+        //TODO erase
+        // siteCode = "DUMMY-SITE2"
+        siteCode = "PR-Test"
+        let debug_message =""
+
+        // マスターデータの雛形
+        let planData = {
+            rows:[],
+        }
+
+        // サイトコードでサイト情報取得
+        res = await apis.getSite(misc,siteCode)
+        if(!("err" in res)){
+            let siteData = res.data
+            res = await apis.getWorkListBySiteCode(misc, siteData.siteCode);
+            let workList = res.data;
+            for (let index in workList) {
+                let equipRow = {}
+                
+                // let actionPlanId = "TE4CJVHTTE2U43JZUUSHGG"
+                let actionPlanId = workList[index].actionPlanId
+                res = await apis.getWorkDetails(misc,siteCode,actionPlanId)
+                if(!("err" in res)){
+                    // TODO 設備なし->点検名にだけ出す。
+                    let worksDetails = res.data
+                    let tmpJobCategory;
+                    // worksDetails.actionPlanClassTypeを文字から数字に変換する場合、数字ではない場合
+                    if ("actionPlanClassType" in worksDetails && !isNaN(Number(worksDetails.actionPlanClassType))) {
+                        tmpJobCategory = worksDetails.actionPlanClassType;
+                    } else {
+                        tmpJobCategory = "5";
+                    }
+                    
+                    // 関連オブジェクト情報処理
+                    let tmpActionPlanRelatedObject;
+                    let NoEquipmentFlag = false;
+                    let parentEquipmentName ="";
+                    let locationName ="";
+                    if ("actionPlanRelatedObject" in worksDetails && worksDetails.actionPlanRelatedObject.length > 0) {
+                        let actionPlanRelatedObjectList = worksDetails.actionPlanRelatedObject;
+                        if (actionPlanRelatedObjectList) {
+                            let tmpEquipList = [];
+                            for (let item of actionPlanRelatedObjectList) {
+                                if (item.startsWith("equipment:")) {
+                                    
+                                    let equipmentId = item.substring("equipment:".length);
+
+                                    // 設備IDで(設備名称,メーカ,設置場所)情報取得
+                                    let res = await apis.searchAssetID(misc, equipmentId);
+
+                                    if (!("err" in res) && res.data[equipmentId]) {
+                                        let equipRow = {
+                                            "equipmentId": equipmentId,
+                                            // 設備名称
+                                            "equipmentName": "asEquipmentProductName" in res.data[equipmentId] ? res.data[equipmentId].asEquipmentProductName : "",
+                                            // 設備番号
+                                            "equipmentNo": "asEquipmentReference" in res.data[equipmentId] ? res.data[equipmentId].asEquipmentReference[0] : "",
+                                            // 設備分類
+                                            "equipmentType": "equipmentType" in res.data[equipmentId].asEquipmentTags ? res.data[equipmentId].asEquipmentTags.equipmentType : "",
+                                            // debug用
+                                            "ALLPROP": res.data
+                                        };
+                                        tmpEquipList.push(equipRow);
+
+                                        // case 1 設備RDS検索 -> 親RDS：7桁、子RDS：12桁
+                                        // case 2 設備RDS検索 -> 親RDS：12桁、子RDS：12 + α桁
+                                        let installPlaceOrDevice = res.data[equipmentId].asEquipmentReference[0];
+                                        
+
+                                        // 設備番号でRDSフィルター検索
+                                        let filterParam = {
+                                            filter: 'rdsReferenceDesignation=' + installPlaceOrDevice
+                                        };
+
+                                        
+                                        res = await apis.getRDS(misc, siteCode, filterParam);
+                                        if (!("err" in res)) {
+                                            let rdsInfo = res.data[installPlaceOrDevice];
+
+                                            // case 1
+                                            // 親RDSが7桁であれば、親RDSは設置場所/RDSは設置場所である。
+                                            if (rdsInfo.rdsParentReferenceDesignation.length == 7) {
+                                                debug_message = "first 7";
+                                                parentEquipmentName = rdsInfo.rdsName;
+                                                let deviceRDS = rdsInfo.rdsParentReferenceDesignation;
+
+                                                let devicefilterParam = {
+                                                    filter: 'rdsReferenceDesignation=' + deviceRDS
+                                                };
+                                                res = await apis.getRDS(misc, siteCode, devicefilterParam);
+
+                                                if (!("err" in res)) {
+                                                    locationName = res.data[deviceRDS].rdsName;
+                                                }
+                                            } else if (rdsInfo.rdsParentReferenceDesignation.length == 12) {
+                                                // case 2
+                                                debug_message = "second 12";
+                                                
+                                                // 親RDSが12桁であれば、親RDSをもう一度フィルターして「装置」確定、
+                                                // その親RDSをもう一度フィルターして「設備場所」確定する。
+                                                let equipmentRDS = rdsInfo.rdsParentReferenceDesignation;
+
+                                                let equipfilterParam = {
+                                                    filter: 'rdsReferenceDesignation=' + equipmentRDS
+                                                };
+                                                res = await apis.getRDS(misc, siteCode, equipfilterParam);
+                                                
+                                                if (!("err" in res)) {
+                                                    parentEquipmentName = res.data[equipmentRDS].rdsName;
+                                                    let deviceRDS = res.data[equipmentRDS].rdsParentReferenceDesignation;
+
+                                                    let devicefilterParam = {
+                                                        filter: 'rdsReferenceDesignation=' + deviceRDS
+                                                    };
+                                                    res = await apis.getRDS(misc, siteCode, devicefilterParam);
+
+                                                    if (!("err" in res)) {
+                                                        debug_message += " second 7";
+                                                        locationName = res.data[deviceRDS].rdsName;
+                                                        
+                                                    }
+                                                }
+                                            } else {
+                                                locationName = "err";
+                                                parentEquipmentName = "err";
+                                            }
+                                        }
+                                        NoEquipmentFlag = false;
+                                    } else {
+                                        NoEquipmentFlag = true;
+                                    }
+                                }
+                            }
+                            tmpActionPlanRelatedObject = tmpEquipList;
+                        }
+                    } else {
+                        // 設備なしフラグ
+                        NoEquipmentFlag = true;
+                    }
+
+                    let AC_startDate = worksDetails.actionPlanStartDaytime ? new Date(worksDetails.actionPlanStartDaytime) : null;
+                    let AC_endDate = worksDetails.actionPlanEndDaytime ? new Date(worksDetails.actionPlanEndDaytime) : null;
+
+                    const startDate = AC_startDate ? formatDateToYMD(AC_startDate, 'Asia/Tokyo') : null;
+                    const endDate = AC_endDate ? formatDateToYMD(AC_endDate, 'Asia/Tokyo') : null;
+                    const now = new Date();
+                    const nowInTokyo = new Intl.DateTimeFormat('en-CA', { 
+                        timeZone: 'Asia/Tokyo', 
+                        year: 'numeric', 
+                        month: '2-digit', 
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                    }).formatToParts(now).reduce((acc, part) => {
+                        if (part.type === 'literal') return acc;
+                        return { ...acc, [part.type]: part.value };
+                    }, {});
+                    
+                    const nowTokyoDate = new Date(`${nowInTokyo.year}-${nowInTokyo.month}-${nowInTokyo.day}T${nowInTokyo.hour}:${nowInTokyo.minute}:${nowInTokyo.second}+09:00`);
+                    // 現在時刻と比較して終了時刻を過ぎた場合、終了時刻を「実績」に追加する。
+                    // 現在時刻と比較して終了時刻を過ぎない場合、開始時刻を「計画」に追加する。
+                    const comparisonType = AC_endDate && AC_endDate < nowTokyoDate ? "実績" : "計画";
+                    const comparisonDate = AC_endDate && AC_endDate < nowTokyoDate ? endDate : startDate;
+                    
+                    // 実績、計画表示
+                    let onePlanDateItems = {
+                        planType:comparisonType,
+                        planDate:comparisonDate,
+                        actionPlanId:actionPlanId
+                    }
+                    let tmpPlanDateItems = [];
+                    tmpPlanDateItems.push(onePlanDateItems)
+
+                    let row;
+
+                    // 親作業IDである場合の形
+                    if(worksDetails.actionPlanParentId != ""){
+                        row = {    
+                            
+                            "Z_message":"親あり",
+                            "Z_関連オブジェクト":equipRow,
+                            AllPropertiesA: worksDetails,
+                            // 実績、計画表示
+                            // ------8/2--8/3---8/4---8/5---8/6---
+                            //case 1 ------●-----〇----〇----------  START(計画)
+                            //case 2 ------〇----●-----〇----------　START(計画)
+                            //case 3 ------〇----〇-----●----------  END(実績)
+                            //case 1 開始時刻 > 現在時刻、(Start : 8/3, End : 8/5, Now : 8/3)
+                            //case 2 終了時刻 > 現在時刻、(Start : 8/3, End : 8/5, Now : 8/4)
+                            //case 3 終了時刻 < 現在時刻、(Start : 8/3, End : 8/4, Now : 8/5)
+                            planDateItems: tmpPlanDateItems,
+                            // 作業ID
+                            actionPlanId:worksDetails.actionPlanId,
+                            // 親作業ID
+                            actionPlanParentId:worksDetails.actionPlanParentId,
+                        }
+                    } else{
+                        // 関連オブジェクトの設備情報がない場合の形式
+                        if(NoEquipmentFlag){
+                            row = {    
+                                "Z_message":"親なし、設備なし",
+                                "Z_関連オブジェクト":equipRow,
+                                AllPropertiesBB: worksDetails,
+
+                                // 作業繰り返し回数(actionPlanCycle)
+                                actionPlanCycle:("jobCycle" in worksDetails.actionPlanTags) ? worksDetails.actionPlanTags.jobCycle : 1,
+                                // 詳細(actionPlanDetails)
+                                // actionPlanDetails:("actionPlanDetails" in worksDetails) ? worksDetails.actionPlanDetails : "NO actionPlanDetails",
+                                actionPlanDetails:tmpJobCategory,
+                                // 作業サイトコード(actionPlanSiteCode)
+                                actionPlanSiteCode:("actionPlanSiteCode" in worksDetails) ? worksDetails.actionPlanSiteCode : "NO actionPlanSiteCode",
+                                // 作業名称(actionPlanTitle)
+                                actionPlanTitle:("actionPlanTitle" in worksDetails) ? worksDetails.actionPlanTitle : "No actionPlanTitle",
+                                // 作業種別 actionPlanClassType : "Job" -> "5" 変更予定
+                                // TODO 画面出力のため強制挿入(pvJobCategory)
+                                pvJobCategory: tmpJobCategory,
+                                // 開始日時
+                                actionPlanStartDaytime:("actionPlanStartDaytime" in worksDetails) ? worksDetails.actionPlanStartDaytime : "",
+                                // 終了日時
+                                actionPlanEndDaytime:("actionPlanEndDaytime" in worksDetails) ? worksDetails.actionPlanEndDaytime : "",
+        
+                                // 実績、計画表示
+                                // ------8/2--8/3---8/4---8/5---8/6---
+                                //case 1 ------●-----〇----〇----------  START(計画)
+                                //case 2 ------〇----●-----〇----------　START(計画)
+                                //case 3 ------〇----〇-----●----------  END(実績)
+                                //case 1 開始時刻 > 現在時刻、(Start : 8/3, End : 8/5, Now : 8/3)
+                                //case 2 終了時刻 > 現在時刻、(Start : 8/3, End : 8/5, Now : 8/4)
+                                //case 3 終了時刻 < 現在時刻、(Start : 8/3, End : 8/4, Now : 8/5)
+                                planDateItems: tmpPlanDateItems,
+
+                                // 作業ID
+                                actionPlanId:worksDetails.actionPlanId,
+                                // 親作業ID
+                                actionPlanParentId:worksDetails.actionPlanParentId,
+        
+                            }
+                        }  else {
+                            row = {
+                                "Z_message":"親なし、設備あり",
+                                "Z_関連オブジェクト":equipRow,
+
+                                // 作業繰り返し回数(actionPlanCycle)
+                                actionPlanCycle:("jobCycle" in worksDetails.actionPlanTags) ? worksDetails.actionPlanTags.jobCycle : 1,
+                                // 詳細(actionPlanDetails)
+                                // actionPlanDetails:("actionPlanDetails" in worksDetails) ? worksDetails.actionPlanDetails : "NO actionPlanDetails",
+                                actionPlanDetails:tmpJobCategory,
+                                // 作業サイトコード(actionPlanSiteCode)
+                                actionPlanSiteCode:("actionPlanSiteCode" in worksDetails) ? worksDetails.actionPlanSiteCode : "NO actionPlanSiteCode",
+                                // 作業名称(actionPlanTitle)
+                                actionPlanTitle:("actionPlanTitle" in worksDetails) ? worksDetails.actionPlanTitle : "No actionPlanTitle",
+                                // 作業種別 actionPlanClassType : "Job" -> "5" 変更予定
+                                // TODO 画面出力のため強制挿入(pvJobCategory)
+                                pvJobCategory: tmpJobCategory,
+                                // 開始日時
+                                actionPlanStartDaytime:("actionPlanStartDaytime" in worksDetails) ? worksDetails.actionPlanStartDaytime : "",
+                                // 終了日時
+                                actionPlanEndDaytime:("actionPlanEndDaytime" in worksDetails) ? worksDetails.actionPlanEndDaytime : "",
+                                // 設備名称
+                                // actionPlanRelatedObject:("actionPlanRelatedObject" in worksDetails) ? worksDetails.actionPlanRelatedObject : [],
+                                actionPlanRelatedObject:tmpActionPlanRelatedObject,
+                                equipmentName: tmpActionPlanRelatedObject.length > 0 ? tmpActionPlanRelatedObject[0].equipmentName : "",
+                                equipmentNo: tmpActionPlanRelatedObject.length > 0 ? tmpActionPlanRelatedObject[0].equipmentNo : "",
+                                equipmentType: tmpActionPlanRelatedObject.length > 0 ? tmpActionPlanRelatedObject[0].equipmentType : "",
+        
+                                // 設備場所
+                                locationName:locationName,
+                                // 設備場所と同じ
+                                locationId:locationName,
+                                // 装置
+                                parentEquipmentName:parentEquipmentName,
+        
+                                // 実績、計画表示
+                                // ------8/2--8/3---8/4---8/5---8/6---
+                                //case 1 ------●-----〇----〇----------  START(計画)
+                                //case 2 ------〇----●-----〇----------　START(計画)
+                                //case 3 ------〇----〇-----●----------  END(実績)
+                                //case 1 開始時刻 > 現在時刻、(Start : 8/3, End : 8/5, Now : 8/3)
+                                //case 2 終了時刻 > 現在時刻、(Start : 8/3, End : 8/5, Now : 8/4)
+                                //case 3 終了時刻 < 現在時刻、(Start : 8/3, End : 8/4, Now : 8/5)
+                                planDateItems: tmpPlanDateItems,
+                                
+                                // 作業ID
+                                actionPlanId:worksDetails.actionPlanId,
+                                // 親作業ID
+                                actionPlanParentId:worksDetails.actionPlanParentId,
+        
+                                AC_startDate: startDate,
+                                AC_endDate: endDate,
+                                AC_compare: comparisonDate,
+                                
+                                // DEBUG用
+                                AllPropertiesCC: worksDetails,
+                                DEBUG_message: debug_message,
+                            }
+                        }
+                    }
+                    
+                    // サイト名称(siteName)
+                    res = await apis.getSite(misc,worksDetails.actionPlanSiteCode)
+                    if(!("err" in res)){
+                        siteName = res.data.siteName
+                        row['siteName'] = siteName;
+                    }
+
+                    planData.rows.push(row)
+                } 
+            }
+        }
+
+        // 関数の呼び出しおよび結果の出力
+        let allActionPlanRows = planData.rows
+        let mergeRows = mergePlanDateItems(allActionPlanRows);
+        planData.expectUpdate = mergeRows;
+        return planData.expectUpdate
+
+    }
+    catch(e){
+        return {err:e.message}
+    }
+}
+
+function formatDateToYMD(date, timeZone) {
+    const options = { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' };
+    const formatter = new Intl.DateTimeFormat('en-CA', options);
+    const parts = formatter.formatToParts(date);
+    const year = parts.find(part => part.type === 'year').value;
+    const month = parts.find(part => part.type === 'month').value;
+    const day = parts.find(part => part.type === 'day').value;
+    return `${year}-${month}-${day}`;
+}
+
+function mergePlanDateItems(rows) {
+    // actionPlanIdとactionPlanParentIdをマッピングするためのマップを作成
+    let map = new Map();
+
+    // rowsを巡回してデータを整理
+    rows.forEach(row => {
+        let { actionPlanId, actionPlanParentId, planDateItems } = row;
+        
+        // planDateItemsが配列であるか確認し、配列でない場合や存在しない場合は空の配列で初期化
+        if (!Array.isArray(planDateItems)) {
+            planDateItems = [];
+        }
+
+        if (actionPlanParentId === '') {
+            // actionPlanParentIdが空文字列の場合
+            map.set(actionPlanId, {
+                ...row,
+                planDateItems: [...planDateItems] // 初期のplanDateItemsを設定
+            });
+        } else {
+            // actionPlanParentIdがある項目は親のplanDateItemsに追加
+            if (map.has(actionPlanParentId)) {
+                let parentItem = map.get(actionPlanParentId);
+                if (!Array.isArray(parentItem.planDateItems)) {
+                    parentItem.planDateItems = [];
+                }
+                parentItem.planDateItems.push(...planDateItems);
+            } else {
+                // 親項目がマップに存在しない場合の処理
+                map.set(actionPlanParentId, {
+                    planDateItems: [...planDateItems]
+                });
+            }
+        }
+    });
+
+    // 最終結果の配列を生成
+    return Array.from(map.values());
+}
