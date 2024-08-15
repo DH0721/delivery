@@ -187,7 +187,25 @@ mock.onGet(/\/workList\/DUMMY-SITE2/).reply(200, [
         actionPlanUpdatedBy: "user:1252976885210548025",
         jobMemo: "作業メモ1",
         jobStatus: 1,
-    }
+    },
+    {
+        actionPlanId: "ABBCCC",
+        actionPlanClassType: "Job",
+        actionPlanCost: 50000,
+        actionPlanCostPfx: "円",
+        actionPlanCreatedAt: "2024-08-07T01:14:57Z",
+        actionPlanCreatedBy: "user:1252976885210548025",
+        actionPlanDetails: "detail11",
+        actionPlanItems: [{}],
+        actionPlanSiteCode: "DUMMY-SITE2",
+        actionPlanStartDaytime: "2024-08-06T15:00:00Z",
+        actionPlanTags: { contractVendor: 'vendor001' },
+        actionPlanTitle: "test_親あり、設備なし",
+        actionPlanUpdatedAt: "2024-08-07T04:17:31Z",
+        actionPlanUpdatedBy: "user:1252976885210548025",
+        jobMemo: "workMemo1",
+        jobStatus: 2,
+    },
 ]);
 
 // getWorkDetails
@@ -479,6 +497,44 @@ mock.onGet(/\/workDetail\/DUMMY-SITE2\/LHPKY2-LSV-PGRYYBXOSYQ/).reply(200,
         "actionPlanRelatedEvent": [],
         "actionPlanRelatedObject": [
             "equipment:DZhZbOhxS1muGcjJeMi8SQ"
+        ],
+        "actionPlanRequestBy": "user:1252976885210548025",
+        "actionPlanSiteCode": "DUMMY-SITE2",
+        "actionPlanStartDaytime": "2024-08-08T15:00:00Z",
+        "actionPlanTags": {},
+        "actionPlanTitle": "actionItemTest1",
+        "actionPlanUpdatedAt": "2024-08-07T06:21:19Z",
+        "actionPlanUpdatedBy": "user:1252976885210548025",
+        "actionPlanWatchers": [],
+        "jobConcernId": "",
+        "jobConcernInstanceId": "",
+        "jobMemo": "memotest",
+        "jobStatus": 1
+    }
+);
+mock.onGet(/\/workDetail\/DUMMY-SITE2\/ABBCCC/).reply(200, 
+    {
+        "actionPlanAttachedFile": [],
+        "actionPlanClassType": "Job",
+        "actionPlanCost": 4400,
+        "actionPlanCost.pfx": "円",
+        "actionPlanCreatedAt": "2024-08-07T06:21:19Z",
+        "actionPlanCreatedBy": "user:1252976885210548025",
+        "actionPlanDetails": "actionItemTest11",
+        "actionPlanEndDaytime": "2024-08-29T15:00:00Z",
+        "actionPlanId": "ABBCCC",
+        "actionPlanItems": [
+            // item details here
+        ],
+        "actionPlanMessages": [],
+        "actionPlanObjectId": [
+            "user:1252976885210548025"
+        ],
+        "actionPlanParentId": "WCVZ4KCRTQKKIACPKKI7TQ",
+        "actionPlanPriority": "Normal",
+        "actionPlanRelatedEvent": [],
+        "actionPlanRelatedObject": [
+            "user:no equip"
         ],
         "actionPlanRequestBy": "user:1252976885210548025",
         "actionPlanSiteCode": "DUMMY-SITE2",

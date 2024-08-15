@@ -1,4 +1,5 @@
-// index.js
+// index.js 
+// TODO npm install axios axios-mock-adapter
 
 const apis = require('./apis');
 
@@ -11,22 +12,26 @@ const workPlans = async () => {
             params: {
                 // siteCode: "PR-Test", 
                 siteCode: "DUMMY-SITE2", 
-                // anotherParam: "value" // 다른 파라미터도 추가 가능
+                input_pvJobCategory: "5", 
+                input_locationName: "01DUMMY", 
+                input_parentEquipmentName: "01DUMMY-EQU", 
             }
         };
+        // input サイトコード
         let siteCode = conditions.params.siteCode;
+        // input 作業カテゴリー
+        let input_pvJobCategory = conditions.params.input_pvJobCategory;
+        // input 設置場所
+        let input_locationName = conditions.params.input_locationName;
+        // input 親設備名前
+        let input_parentEquipmentName = conditions.params.input_parentEquipmentName;
         let siteName = "";
-
-        let input_pvJobCategory = "";
-        let input_locationName = "";
-        let input_parentEquipmentName = "";
 
         let debug_message = "";
 
         let planData = {
             rows: [],
         };
-
 
         let res = await apis.getSite(misc, siteCode);
         const siteData = res.data;
@@ -56,7 +61,7 @@ const workPlans = async () => {
             // 関連オブジェクト情報処理
             let tmpActionPlanRelatedObject;
             // 設備なしフラグ : 作業詳細の関連オブジェクトに設備情報がなければ「true」にする。
-            let NoEquipmentFlag = false;
+            let EquipmentFlag = false;
             let parentEquipmentName =""
             let locationName =""
             if ("actionPlanRelatedObject" in worksDetails && worksDetails.actionPlanRelatedObject.length > 0) {
@@ -109,8 +114,9 @@ const workPlans = async () => {
                                 };
 
                                 res = await apis.getRDS(misc, siteCode, devicefilterParam);
-                                // 装置
+                                // 設置場所
                                 locationName = res.data[deviceRDS].rdsName;
+                                EquipmentFlag = true;
                                 
                             } else if (rdsInfo.rdsParentReferenceDesignation.length == 12) {
                                 // case 2
@@ -137,23 +143,18 @@ const workPlans = async () => {
                                     // 設置場所
                                     locationName = res.data[deviceRDS].rdsName;
                                 }
+                                EquipmentFlag = true;
 
                             } else {
                                 locationName = "設置場所情報なし";
                                 parentEquipmentName = "装置情報なし";
-                                NoEquipmentFlag = true;
                             }
                             
-                        } else {
-                            NoEquipmentFlag = true;
-                        }
+                        } 
                     }
                 }
                 tmpActionPlanRelatedObject = tmpEquipList;
-                
-            } else {
-                NoEquipmentFlag = true;
-            }
+            } 
         
             // worksDetails.actionPlanTags?.jobCycleがnull又はundefinedの場合１にする。
             // 必須パラメータ
@@ -168,10 +169,30 @@ const workPlans = async () => {
             tmpPlanDateItems.push(onePlanDateItems);
 
             let row;
-            // 親作業IDである場合の形
-            if(worksDetails.actionPlanParentId != ""){
+            // 関連オブジェクトの設備情報がない場合の形式
+            if(EquipmentFlag){
                 row = {
-                    "Message":"親あり",
+                    "Message":"親なし、設備あり",
+                    // 作業繰り返し回数(actionPlanCycle)
+                    actionPlanCycle:actionPlanCycle,
+                    // 詳細(actionPlanDetails)
+                    // actionPlanDetails:("actionPlanDetails" in worksDetails) ? worksDetails.actionPlanDetails : "NO actionPlanDetails",
+                    actionPlanDetails:pvJobCategory,
+                    // 作業サイトコード(actionPlanSiteCode)
+                    actionPlanSiteCode:actionPlanSiteCode,
+                    // 作業名称(actionPlanTitle)
+                    actionPlanTitle:actionPlanTitle,
+                    // 作業種別 actionPlanClassType : "Job" -> "5" 変更予定
+                    // TODO 画面出力のため強制挿入(pvJobCategory)
+                    pvJobCategory: pvJobCategory,
+                    
+                    // 設備名称
+                    // actionPlanRelatedObject:("actionPlanRelatedObject" in worksDetails) ? worksDetails.actionPlanRelatedObject : [],
+                    actionPlanRelatedObject:tmpActionPlanRelatedObject,
+                    equipmentName: tmpActionPlanRelatedObject.length > 0 ? tmpActionPlanRelatedObject[0].equipmentName : "",
+                    equipmentNo: tmpActionPlanRelatedObject.length > 0 ? tmpActionPlanRelatedObject[0].equipmentNo : "",
+                    equipmentType: tmpActionPlanRelatedObject.length > 0 ? tmpActionPlanRelatedObject[0].equipmentType : "",
+
                     // 実績、計画表示
                     // ------8/2--8/3---8/4---8/5---8/6---
                     //case 1 ------●-----〇----〇----------  START(計画)
@@ -185,115 +206,83 @@ const workPlans = async () => {
                     actionPlanId:worksDetails.actionPlanId,
                     // 親作業ID
                     actionPlanParentId:worksDetails.actionPlanParentId,
+                    
+                    // 設備場所
+                    locationName:locationName,
+                    // 設備場所と同じ
+                    locationId:locationName,
+                    // 装置
+                    parentEquipmentName:parentEquipmentName,
+
+                    // 実際使用しない
+                    DEBUG_compare: onePlanDateItems.planDate,
+                    // 開始日時
+                    DEBUG_actionPlanStartDaytime:("actionPlanStartDaytime" in worksDetails) ? worksDetails.actionPlanStartDaytime : "",
+                    // 終了日時
+                    DEBUG_actionPlanEndDaytime:("DEBUG_actionPlanEndDaytime" in worksDetails) ? worksDetails.DEBUG_actionPlanEndDaytime : "",
                 }
-            } else{
-                // 関連オブジェクトの設備情報がない場合の形式
-                if(NoEquipmentFlag){
-                    row = {    
-                        "Message":"親なし、設備なし",
-                        // 作業繰り返し回数(actionPlanCycle)
-                        actionPlanCycle:actionPlanCycle,
-                        // 詳細(actionPlanDetails)
-                        // actionPlanDetails:("actionPlanDetails" in worksDetails) ? worksDetails.actionPlanDetails : "NO actionPlanDetails",
-                        actionPlanDetails:pvJobCategory,
-                        // 作業サイトコード(actionPlanSiteCode)
-                        actionPlanSiteCode:actionPlanSiteCode,
-                        // 作業名称(actionPlanTitle)
-                        actionPlanTitle:actionPlanTitle,
-                        // 作業種別 actionPlanClassType : "Job" -> "5" 変更予定
-                        // TODO 画面出力のため強制挿入(pvJobCategory)
-                        pvJobCategory: pvJobCategory,
-                        // 実績、計画表示
-                        // ------8/2--8/3---8/4---8/5---8/6---
-                        //case 1 ------●-----〇----〇----------  START(計画)
-                        //case 2 ------〇----●-----〇----------　START(計画)
-                        //case 3 ------〇----〇-----●----------  END(実績)
-                        //case 1 開始時刻 > 現在時刻、(Start : 8/3, End : 8/5, Now : 8/3)
-                        //case 2 終了時刻 > 現在時刻、(Start : 8/3, End : 8/5, Now : 8/4)
-                        //case 3 終了時刻 < 現在時刻、(Start : 8/3, End : 8/4, Now : 8/5)
-                        planDateItems: tmpPlanDateItems,
-                        // 作業ID
-                        actionPlanId:worksDetails.actionPlanId,
-                        // 親作業ID
-                        actionPlanParentId:worksDetails.actionPlanParentId,
+            }  else {
+                row = {    
+                    "Message":"親なし、設備なし",
+                    // 作業繰り返し回数(actionPlanCycle)
+                    actionPlanCycle:actionPlanCycle,
+                    // 詳細(actionPlanDetails)
+                    // actionPlanDetails:("actionPlanDetails" in worksDetails) ? worksDetails.actionPlanDetails : "NO actionPlanDetails",
+                    actionPlanDetails:pvJobCategory,
+                    // 作業サイトコード(actionPlanSiteCode)
+                    actionPlanSiteCode:actionPlanSiteCode,
+                    // 作業名称(actionPlanTitle)
+                    actionPlanTitle:actionPlanTitle,
+                    // 作業種別 actionPlanClassType : "Job" -> "5" 変更予定
+                    // TODO 画面出力のため強制挿入(pvJobCategory)
+                    pvJobCategory: pvJobCategory,
+                    // 実績、計画表示
+                    // ------8/2--8/3---8/4---8/5---8/6---
+                    //case 1 ------●-----〇----〇----------  START(計画)
+                    //case 2 ------〇----●-----〇----------　START(計画)
+                    //case 3 ------〇----〇-----●----------  END(実績)
+                    //case 1 開始時刻 > 現在時刻、(Start : 8/3, End : 8/5, Now : 8/3)
+                    //case 2 終了時刻 > 現在時刻、(Start : 8/3, End : 8/5, Now : 8/4)
+                    //case 3 終了時刻 < 現在時刻、(Start : 8/3, End : 8/4, Now : 8/5)
+                    planDateItems: tmpPlanDateItems,
+                    // 作業ID
+                    actionPlanId:worksDetails.actionPlanId,
+                    // 親作業ID
+                    actionPlanParentId:worksDetails.actionPlanParentId,
 
-                        // 開始日時
-                        DEBUG_actionPlanStartDaytime:worksDetails.actionPlanStartDaytime,
-                        // 終了日時
-                        DEBUG_actionPlanEndDaytime:worksDetails.actionPlanEndDaytime,
+                    // 設備場所
+                    locationName:locationName,
+                    // 装置
+                    parentEquipmentName:parentEquipmentName,
 
-                    }
-                }  else {
-                    row = {
-                        "Message":"親なし、設備あり",
-                        // 作業繰り返し回数(actionPlanCycle)
-                        actionPlanCycle:actionPlanCycle,
-                        // 詳細(actionPlanDetails)
-                        // actionPlanDetails:("actionPlanDetails" in worksDetails) ? worksDetails.actionPlanDetails : "NO actionPlanDetails",
-                        actionPlanDetails:pvJobCategory,
-                        // 作業サイトコード(actionPlanSiteCode)
-                        actionPlanSiteCode:actionPlanSiteCode,
-                        // 作業名称(actionPlanTitle)
-                        actionPlanTitle:actionPlanTitle,
-                        // 作業種別 actionPlanClassType : "Job" -> "5" 変更予定
-                        // TODO 画面出力のため強制挿入(pvJobCategory)
-                        pvJobCategory: pvJobCategory,
-                        
-                        // 設備名称
-                        // actionPlanRelatedObject:("actionPlanRelatedObject" in worksDetails) ? worksDetails.actionPlanRelatedObject : [],
-                        actionPlanRelatedObject:tmpActionPlanRelatedObject,
-                        equipmentName: tmpActionPlanRelatedObject.length > 0 ? tmpActionPlanRelatedObject[0].equipmentName : "",
-                        equipmentNo: tmpActionPlanRelatedObject.length > 0 ? tmpActionPlanRelatedObject[0].equipmentNo : "",
-                        equipmentType: tmpActionPlanRelatedObject.length > 0 ? tmpActionPlanRelatedObject[0].equipmentType : "",
+                    // 開始日時
+                    DEBUG_actionPlanStartDaytime:worksDetails.actionPlanStartDaytime,
+                    // 終了日時
+                    DEBUG_actionPlanEndDaytime:worksDetails.actionPlanEndDaytime,
 
-                        // 設備場所
-                        locationName:locationName,
-                        // 設備場所と同じ
-                        locationId:locationName,
-                        // 装置
-                        parentEquipmentName:parentEquipmentName,
-                        // 実績、計画表示
-                        // ------8/2--8/3---8/4---8/5---8/6---
-                        //case 1 ------●-----〇----〇----------  START(計画)
-                        //case 2 ------〇----●-----〇----------　START(計画)
-                        //case 3 ------〇----〇-----●----------  END(実績)
-                        //case 1 開始時刻 > 現在時刻、(Start : 8/3, End : 8/5, Now : 8/3)
-                        //case 2 終了時刻 > 現在時刻、(Start : 8/3, End : 8/5, Now : 8/4)
-                        //case 3 終了時刻 < 現在時刻、(Start : 8/3, End : 8/4, Now : 8/5)
-                        planDateItems: tmpPlanDateItems,
-                        // 作業ID
-                        actionPlanId:worksDetails.actionPlanId,
-                        // 親作業ID
-                        actionPlanParentId:worksDetails.actionPlanParentId,
-
-                        // 実際使用しない
-                        DEBUG_compare: onePlanDateItems.planDate,
-                        // 開始日時
-                        DEBUG_actionPlanStartDaytime:("actionPlanStartDaytime" in worksDetails) ? worksDetails.actionPlanStartDaytime : "",
-                        // 終了日時
-                        DEBUG_actionPlanEndDaytime:("DEBUG_actionPlanEndDaytime" in worksDetails) ? worksDetails.DEBUG_actionPlanEndDaytime : "",
-                    }
                 }
+            }
+
+            if(worksDetails.actionPlanParentId != ""){
+                row["Message"] = "親あり";
             }
             
             // サイト名称(siteName)
-            res = await apis.getSite(misc,actionPlanSiteCode)
-            if(!("err" in res)){
-                siteName = res.data.siteName
-                row['siteName'] = siteName;
-            }
+            row['siteName'] = siteName;
 
             planData.rows.push(row)
         }
 
         // 関数の呼び出しおよび結果の出力
         let allActionPlanRows = planData.rows
-        // 親なしが先に配置するようにフィルターをかける。
-        const sortedActionPlanRows = moveParentRelatedMessagesToBottom(allActionPlanRows);
-        // 親なしリストに親ありをmergeする。
+        // 検索条件フィルターを掛ける
+        const filteredActionPlans = filterActionPlans(allActionPlanRows, conditions);
+        // 「作業親がない物」が先に配置するようにフィルターを掛ける。
+        const sortedActionPlanRows = moveParentRelatedMessagesToBottom(filteredActionPlans);
+        // 「作業親がある物」リストを「作業親がない物」をmergeする。
         let mergeRows = mergePlanDateItems(sortedActionPlanRows);
         planData.expectUpdate = mergeRows;
-        return planData
+        return planData.expectUpdate
 
     } catch (e) {
         return { err: e.message };
@@ -414,5 +403,35 @@ function moveParentRelatedMessagesToBottom(actionPlanRows) {
             return -1; // aがbより前に配置　ba順番 -> abにする。
         }
         return 0; // 順番維持
+    });
+}
+
+// 作業種別・設置場所・装置をフィルターする。
+function filterActionPlans(allActionPlanRows, conditions) {
+    const { siteCode, input_pvJobCategory, input_locationName, input_parentEquipmentName } = conditions.params;
+
+    return allActionPlanRows.filter(row => {
+        let siteCodeMatch = true;
+        let categoryMatch = true;
+        let locationMatch = true;
+        let parentEquipmentMatch = true;
+
+        if (siteCode) {
+            siteCodeMatch = row.actionPlanSiteCode === siteCode;
+        }
+
+        if (input_pvJobCategory) {
+            categoryMatch = row.pvJobCategory === input_pvJobCategory;
+        }
+
+        if (input_locationName) {
+            locationMatch = row.locationName === input_locationName;
+        }
+
+        if (input_parentEquipmentName) {
+            parentEquipmentMatch = row.parentEquipmentName === input_parentEquipmentName;
+        }
+
+        return siteCodeMatch && categoryMatch && locationMatch && parentEquipmentMatch;
     });
 }
