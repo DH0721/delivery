@@ -13,8 +13,8 @@ const workPlans = async () => {
                 // siteCode: "PR-Test", 
                 siteCode: "DUMMY-SITE2", 
                 input_pvJobCategory: "5", 
-                input_locationName: "01DUMMY", 
-                input_parentEquipmentName: "01DUMMY-EQU", 
+                // input_locationName: "01DUMMY", 
+                // input_parentEquipmentName: "01DUMMY-EQU", 
             }
         };
         // input サイトコード
@@ -26,8 +26,6 @@ const workPlans = async () => {
         // input 親設備名前
         let input_parentEquipmentName = conditions.params.input_parentEquipmentName;
         let siteName = "";
-
-        let debug_message = "";
 
         let planData = {
             rows: [],
@@ -105,7 +103,6 @@ const workPlans = async () => {
                             // case 1
                             // 親RDSが7桁であれば、親RDSは設置場所/RDSは設置場所である。
                             if (rdsInfo.rdsParentReferenceDesignation.length == 7) {
-                                debug_message = "first 7";
                                 // 装置
                                 parentEquipmentName = rdsInfo.rdsName;
                                 let deviceRDS = rdsInfo.rdsParentReferenceDesignation;
@@ -120,7 +117,6 @@ const workPlans = async () => {
                                 
                             } else if (rdsInfo.rdsParentReferenceDesignation.length == 12) {
                                 // case 2
-                                debug_message = "second 12";
                                 // 親RDSが12桁であれば、親RDSをもう一度フィルターして「装置」確定、
                                 // その親RDSをもう一度フィルターして「設備場所」確定する。
                                 let equipmentRDS = rdsInfo.rdsParentReferenceDesignation;
@@ -139,7 +135,6 @@ const workPlans = async () => {
                                 
                                 res = await apis.getRDS(misc, siteCode, devicefilterParam);
                                 if (!("err" in res)) {
-                                    debug_message += " second 7";
                                     // 設置場所
                                     locationName = res.data[deviceRDS].rdsName;
                                 }
@@ -149,13 +144,11 @@ const workPlans = async () => {
                                 locationName = "設置場所情報なし";
                                 parentEquipmentName = "装置情報なし";
                             }
-                            
                         } 
                     }
                 }
                 tmpActionPlanRelatedObject = tmpEquipList;
             } 
-        
             // worksDetails.actionPlanTags?.jobCycleがnull又はundefinedの場合１にする。
             // 必須パラメータ
             let actionPlanCycle = (worksDetails && worksDetails.actionPlanTags && worksDetails.actionPlanTags.jobCycle) !== undefined ? worksDetails.actionPlanTags.jobCycle : 1;
@@ -172,7 +165,8 @@ const workPlans = async () => {
             // 関連オブジェクトの設備情報がない場合の形式
             if(EquipmentFlag){
                 row = {
-                    "Message":"親なし、設備あり",
+                    isParent: false,
+                    // "Message":"親なし、設備あり",
                     // 作業繰り返し回数(actionPlanCycle)
                     actionPlanCycle:actionPlanCycle,
                     // 詳細(actionPlanDetails)
@@ -223,7 +217,8 @@ const workPlans = async () => {
                 }
             }  else {
                 row = {    
-                    "Message":"親なし、設備なし",
+                    isParent: false,
+                    // "Message":"親なし、設備なし",
                     // 作業繰り返し回数(actionPlanCycle)
                     actionPlanCycle:actionPlanCycle,
                     // 詳細(actionPlanDetails)
@@ -264,7 +259,7 @@ const workPlans = async () => {
             }
 
             if(worksDetails.actionPlanParentId != ""){
-                row["Message"] = "親あり";
+                row["isParent"] = true;
             }
             
             // サイト名称(siteName)
@@ -393,16 +388,16 @@ function mergePlanDateItems(rows) {
     return Array.from(map.values());
 }
 
-// '親あり' メッセージであれば、配列の下に位置する。
+// 親の設備がある配列を後ろに配置する。
 function moveParentRelatedMessagesToBottom(actionPlanRows) {
     return actionPlanRows.sort((a, b) => {
-        if (a.Message === '親あり' && b.Message !== '親あり') {
-            return 1; // aがbより後ろに配置　ab順番 -> baにする。
+        if (a.isParent && !b.isParent) {
+            return 1; // aをb後ろに配置
         }
-        if (a.Message !== '親あり' && b.Message === '親あり') {
-            return -1; // aがbより前に配置　ba順番 -> abにする。
+        if (!a.isParent && b.isParent) {
+            return -1; // aをb前に配置
         }
-        return 0; // 順番維持
+        return 0; 
     });
 }
 
@@ -435,3 +430,81 @@ function filterActionPlans(allActionPlanRows, conditions) {
         return siteCodeMatch && categoryMatch && locationMatch && parentEquipmentMatch;
     });
 }
+
+// -------------------------------------------------------------------------------------------------------------------------------
+// 予備品削除
+async function spareDelete(){
+    try{
+        // 削除するデータIDを取得
+        let spare_id = param.params
+
+        // 予備品情報取得
+        let res = await apis.searchSpareID(misc,spare_id)
+        if(!("err" in res)){
+            let siteCodeList = res.data
+            // ヒットした最初の予備品を抜き出し
+            let assetCode = Object.keys(siteCodeList)[0];
+            let assetParam = siteCodeList[assetCode]
+
+            // 予備品情報削除
+            let result = await apis.deleteSpare(misc,assetParam.asSpareSiteCode,spare_id)
+
+            // 添付ファイルがあるか?
+            let fileName = assetParam.asSpareTags.fileName
+            if(fileName != null){
+                let fileList = fileName.split(",")
+                for(let fileCount=0;fileCount<fileList.length;fileCount++){
+                    result = await apis.deleteDeviceFile(misc,assetParam.asSpareSiteCode,fileList[fileCount])
+                }
+            }
+
+            return result
+        }
+
+        return {err:"err"}
+    }
+    catch(e){
+        return {err:e.message}
+    }
+}
+
+// 作業削除
+async function workDelete(){
+    try{
+        // 削除するデータIDを取得
+        let work_id = param.params
+
+        // 予備品情報取得
+        // let res = await apis.searchSpareID(misc,work_id)
+        // 作業情報取得
+        let res = await apis.searchWorkID(misc,work_id)
+        if(!("err" in res)){
+            let siteCodeList = res.data
+            // ヒットした最初の予備品を抜き出し
+            let workCode = Object.keys(siteCodeList)[0];
+            let workParam = siteCodeList[workCode]
+
+            // // 予備品情報削除
+            // let result = await apis.deleteSpare(misc,workParam.asSpareSiteCode,work_id)
+            // 作業情報削除　TODO　workParam.asSpareSiteCode -> workParam.???
+            let result = await apis.deleteSpare(misc,workParam.actionPlanSiteCode,work_id)
+
+            // 添付ファイルがあるか? TODO workParam.asSpareTags -> workParam.???
+            let fileName = workParam.asSpareTags.fileName
+            if(fileName != null){
+                let fileList = fileName.split(",")
+                for(let fileCount=0;fileCount<fileList.length;fileCount++){
+                    result = await apis.deleteDeviceFile(misc,workParam.asSpareSiteCode,fileList[fileCount])
+                }
+            }
+
+            return result
+        }
+
+        return {err:"err"}
+    }
+    catch(e){
+        return {err:e.message}
+    }
+}
+// -------------------------------------------------------------------------------------------------------------------------------

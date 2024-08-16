@@ -534,7 +534,9 @@ mock.onGet(/\/workDetail\/DUMMY-SITE2\/ABBCCC/).reply(200,
         "actionPlanPriority": "Normal",
         "actionPlanRelatedEvent": [],
         "actionPlanRelatedObject": [
-            "user:no equip"
+            "user:no equip",
+            // parentSevenLengthCheck
+            "equipment:parentSevenLengthCheck",
         ],
         "actionPlanRequestBy": "user:1252976885210548025",
         "actionPlanSiteCode": "DUMMY-SITE2",
@@ -618,6 +620,34 @@ mock.onGet(/\/searchAssetID\/vAdwa1zKTnaKZBsTiI3-FQ/).reply(200,
                 parentEquipmentId: "01DUMMY-EQU"
             },
             asEquipmentUniqueIdentifier: "vAdwa1zKTnaKZBsTiI3-FQ",
+            asEquipmentUpdatedAt: "2024-03-22T12:05:46Z",
+            asEquipmentUpdatedBy: "user:1192788431525121753",
+        }
+    }
+);
+mock.onGet(/\/searchAssetID\/parentSevenLengthCheck/).reply(200, 
+    {
+        "parentSevenLengthCheck":{
+            asEquipmentClassType: "Equipment",
+            asEquipmentCreatedAt: "2024-03-22T06:58:33Z",
+            asEquipmentCreatedBy:"user:1192788431525121753",
+            asEquipmentInstallDate:"2024-03-22T00:00:00.000Z",
+            asEquipmentLocation: "01DUMMY",
+            asEquipmentManufacturer: "東芝",
+            asEquipmentModelNumber: "A012345",
+            asEquipmentProductName: "TEST2",
+            asEquipmentReference: ['01DUM01DUM01'],
+            asEquipmentSerialNumber: "AAAA12345",
+            asEquipmentSiteCode: "DUMMY-SITE2",
+            asEquipmentSpareParts: (3) ['PwZpPiiiRtu_K1_vDH-Hjw', '_K3VkG7jTROIVwo-9wIz6A', 'mzlctPU9Qy6ScVY4yGBFwg'],
+            asEquipmentTags: {
+                assetNo: 'SJISAN-12345', 
+                fileName: '', 
+                madeDate: null, 
+                retailer: 'サプライヤー', 
+                parentEquipmentId: "01DUMMY-EQU"
+            },
+            asEquipmentUniqueIdentifier: "parentSevenLengthCheck",
             asEquipmentUpdatedAt: "2024-03-22T12:05:46Z",
             asEquipmentUpdatedBy: "user:1192788431525121753",
         }
