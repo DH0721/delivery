@@ -19,12 +19,12 @@ const workPlans = async () => {
         };
         // input サイトコード
         let siteCode = conditions.params.siteCode;
-        // input 作業カテゴリー
-        let input_pvJobCategory = conditions.params.input_pvJobCategory;
-        // input 設置場所
-        let input_locationName = conditions.params.input_locationName;
-        // input 親設備名前
-        let input_parentEquipmentName = conditions.params.input_parentEquipmentName;
+        // // input 作業カテゴリー
+        // let input_pvJobCategory = conditions.params.input_pvJobCategory;
+        // // input 設置場所
+        // let input_locationName = conditions.params.input_locationName;
+        // // input 親設備名前
+        // let input_parentEquipmentName = conditions.params.input_parentEquipmentName;
         let siteName = "";
 
         let planData = {
