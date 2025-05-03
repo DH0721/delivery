@@ -2,7 +2,7 @@ function generateDates({ startDateTime, intervalValue, intervalType, endDateTime
     const dates = [];
     let currentDate = new Date(startDateTime);
 
-    // 시간도 포함하여日時を保存
+    // 時間も含めて日時を保存
     currentDate.setUTCHours(currentDate.getUTCHours(), currentDate.getUTCMinutes(), currentDate.getUTCSeconds(), currentDate.getUTCMilliseconds());
 
     const firstCurrentDate = currentDate.getUTCDate();

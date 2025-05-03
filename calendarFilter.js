@@ -1,53 +1,74 @@
-// 더미 데이터 준비 - 9개 케이스
+// ダミーデータの準備 - 9つのケース
+// const worksList = [
+//     { id: 1, actionPlanStartDaytime: '2024-09-22T00:00:00.000Z', actionPlanEndDaytime: '2024-09-26T23:59:00.000Z' },
+//     { id: 2, actionPlanStartDaytime: '2024-09-26T00:00:00.000Z', actionPlanEndDaytime: '2024-09-28T23:59:00.000Z' },
+//     { id: 3, actionPlanStartDaytime: '2024-09-25T00:00:00.000Z', actionPlanEndDaytime: '2024-09-25T23:59:00.000Z' },
+//     { id: 4, actionPlanStartDaytime: '2024-09-27T00:00:00.000Z', actionPlanEndDaytime: '2024-09-28T23:59:00.000Z' },
+//     { id: 5, actionPlanStartDaytime: '2024-09-22T00:00:00.000Z', actionPlanEndDaytime: '2024-09-23T23:59:00.000Z' }, 
+//     { id: 6, actionPlanStartDaytime: '2024-09-23T00:00:00.000Z', actionPlanEndDaytime: '2024-09-27T23:59:00.000Z' }, 
+//     { id: 7, actionPlanEndDaytime: '2024-09-25T23:59:00.000Z' },  // 開始日なし
+//     { id: 8, actionPlanStartDaytime: '2024-09-25T00:00:00.000Z' }, // 終了日なし
+//     { id: 9 }, // 開始日と終了日が両方なし
+// ];
 const worksList = [
-    { id: 1, actionPlanStartDaytime: '2024-09-22T00:00:00.000Z', actionPlanEndDaytime: '2024-09-26T23:59:00.000Z' },
-    { id: 2, actionPlanStartDaytime: '2024-09-26T00:00:00.000Z', actionPlanEndDaytime: '2024-09-28T23:59:00.000Z' },
-    { id: 3, actionPlanStartDaytime: '2024-09-25T00:00:00.000Z', actionPlanEndDaytime: '2024-09-25T23:59:00.000Z' },
-    { id: 4, actionPlanStartDaytime: '2024-09-27T00:00:00.000Z', actionPlanEndDaytime: '2024-09-28T23:59:00.000Z' },
-    { id: 5, actionPlanStartDaytime: '2024-09-22T00:00:00.000Z', actionPlanEndDaytime: '2024-09-23T23:59:00.000Z' }, 
-    { id: 6, actionPlanStartDaytime: '2024-09-23T00:00:00.000Z', actionPlanEndDaytime: '2024-09-27T23:59:00.000Z' }, 
-    { id: 7, actionPlanEndDaytime: '2024-09-25T23:59:00.000Z' },  // 시작일 없음
-    { id: 8, actionPlanStartDaytime: '2024-09-25T00:00:00.000Z' }, // 종료일 없음
-    { id: 9 }, // 시작일과 종료일 모두 없음
+    { id: 1, actionPlanStartDaytime: '2024-09-24T00:00:00.000Z', actionPlanEndDaytime: '2024-09-26T23:59:00.000Z' },
+    { id: 2, actionPlanEndDaytime: '2024-09-26T23:59:00.000Z' },  // 開始日なし
+    { id: 3, actionPlanStartDaytime: '2024-09-24T00:00:00.000Z' }, // 終了日なし
+    { id: 4 }, // 開始日と終了日が両方なし
 ];
 
-// 필터 조건 (예시)
-const startDaytimeFilter = '2024-09-24T00:00:00.000Z'; 
-const endDaytimeFilter = '2024-09-26T23:59:00.000Z'; 
+// フィルター条件 (例)
+let startDaytimeFilter = ''; 
+let endDaytimeFilter = ''; 
+// startDaytimeFilter = '2024-09-23T00:00:00.000Z'; 
+// endDaytimeFilter = '2024-09-27T23:59:00.000Z'; 
 
-// 필터링 결과를 담을 배열
+// フィルター結果を格納する配列
 const jobs = {
     rows: []
 };
 
-// 필터링 로직
+// フィルタリングロジック
 worksList.forEach(item => {
-    const row = { id: item.id, actionPlanStartDaytime: item.actionPlanStartDaytime || null, actionPlanEndDaytime: item.actionPlanEndDaytime || null }; // 기본 row 설정
+    const row = { id: item.id, actionPlanStartDaytime: item.actionPlanStartDaytime || null, actionPlanEndDaytime: item.actionPlanEndDaytime || null }; // 基本行設定
 
     const startDate = item.actionPlanStartDaytime ? new Date(item.actionPlanStartDaytime) : null;
     const endDate = item.actionPlanEndDaytime ? new Date(item.actionPlanEndDaytime) : null;
 
-    // 패턴 1, 2, 3의 공통 조건
+    // パターン 1, 2, 3 の共通条件
     let inDateRange = false;
 
-    // 조건 체크
+    // 条件チェック
     if (startDate && endDate) {
         inDateRange = (startDate <= new Date(endDaytimeFilter) && endDate >= new Date(startDaytimeFilter));
     } 
-    // 패턴 2: actionPlanStartDaytime가 없고 actionPlanEndDaytime만 존재
+    // パターン 2: actionPlanStartDaytimeがなくて actionPlanEndDaytimeだけ存在
     else if (!startDate && endDate) {
-        inDateRange = (endDate >= new Date(startDaytimeFilter)); 
+        if(!startDaytimeFilter) {
+            inDateRange = (endDate >= new Date(endDaytimeFilter)); 
+        } else {
+            inDateRange = (endDate >= new Date(startDaytimeFilter)); 
+        }
     } 
-    // 패턴 3: actionPlanEndDaytime가 없고 actionPlanStartDaytime만 존재
+    // パターン 3: actionPlanEndDaytimeがなくて actionPlanStartDaytimeだけ存在
     else if (startDate && !endDate) {
-        inDateRange = (startDate >= new Date(startDaytimeFilter));
+        if(!endDaytimeFilter) {
+            inDateRange = (startDate <= new Date(startDaytimeFilter)); 
+        } else {
+            inDateRange = (startDate <= new Date(endDaytimeFilter));
+        }
     } 
-    // 패턴 4: 둘 다 없는 경우
+    // パターン 4: 両方ともない場合
     else {
-        inDateRange = true; // 항상 true
+        inDateRange = false; // 常に false
     }
 
-    // startDaytimeFilter이 빈 문자열인 경우 추가 처리
+    // パターン 5: filter条件がない場合、true
+    if (!startDaytimeFilter && !endDaytimeFilter) {
+        inDateRange = true;
+    } 
+
+    // startDaytimeFilterが空文字列の場合の追加処理
     if (startDaytimeFilter === "") {
         if (startDate) {
             inDateRange = inDateRange || (startDate <= new Date(endDaytimeFilter));
@@ -56,7 +77,7 @@ worksList.forEach(item => {
             inDateRange = inDateRange || (endDate <= new Date(endDaytimeFilter));
         }
     }
-    // endDaytimeFilter이 빈 문자열인 경우 추가 처리
+    // endDaytimeFilterが空文字列の場合の追加処理
     if (endDaytimeFilter === "") {
         if (startDate) {
             inDateRange = inDateRange || (startDate >= new Date(startDaytimeFilter));
@@ -66,14 +87,14 @@ worksList.forEach(item => {
         }
     }
 
-    // 결과 추가
+    // 結果を追加
     if (inDateRange) {
-        // actionPlanStartDaytime이 null인 경우 키 삭제
+        // actionPlanStartDaytimeが null の場合、キーを削除
         if (row.actionPlanStartDaytime === null) {
             delete row.actionPlanStartDaytime;
         }
 
-        // actionPlanEndDaytime이 null인 경우 키 삭제
+        // actionPlanEndDaytimeが null の場合、キーを削除
         if (row.actionPlanEndDaytime === null) {
             delete row.actionPlanEndDaytime;
         }
@@ -82,5 +103,5 @@ worksList.forEach(item => {
     }
 });
 
-// 필터링된 결과를 JSON 형식으로 출력
+// フィルタリングされた結果を JSON 形式で出力
 console.log("Filtered Results:", JSON.stringify(jobs.rows, null, 2));
